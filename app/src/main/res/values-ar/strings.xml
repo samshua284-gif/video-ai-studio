@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">استوديو الفيديو بالذكاء الاصطناعي</string>
+    <string name="dashboard_tagline">من أول قصّ إلى المشاركة النهائية، بحرية تامة.</string>
+    <string name="import_video">استيراد فيديو</string>
+    <string name="import_hint">اختر فيديو لفحص بياناته الحقيقية ومعاينته. لا يُعدَّل الملف الأصلي أبدًا.</string>
+    <string name="tool_arrives">تُبنى هذه الأداة في المرحلة %1$d.</string>
+    <string name="back">رجوع</string>
+
+    <string name="tool_enhance">تحسين الفيديو بالذكاء الاصطناعي</string>
+    <string name="tool_4k">الترقية إلى 4K</string>
+    <string name="tool_noise">إزالة الضوضاء</string>
+    <string name="tool_mp3">استخراج MP3</string>
+    <string name="tool_transcribe">التفريغ الصوتي</string>
+    <string name="tool_translate">الترجمة</string>
+    <string name="tool_subtitles">مولّد الترجمة المرئية</string>
+    <string name="tool_compress">ضغط الفيديو</string>
+    <string name="tool_trim">قصّ الفيديو</string>
+    <string name="tool_audio">تحسين الصوت</string>
+    <string name="tool_batch">المعالجة الجماعية</string>
+    <string name="tool_queue">قائمة المعالجة</string>
+    <string name="tool_history">السجل</string>
+    <string name="tool_settings">الإعدادات</string>
+
+    <string name="meta_file_name">اسم الملف</string>
+    <string name="meta_duration">المدة</string>
+    <string name="meta_size">حجم الملف</string>
+    <string name="meta_resolution">الدقة</string>
+    <string name="meta_fps">معدل الإطارات</string>
+    <string name="meta_video_codec">ترميز الفيديو</string>
+    <string name="meta_audio_codec">ترميز الصوت</string>
+    <string name="meta_audio_tracks">مسارات الصوت</string>
+    <string name="meta_subtitle_tracks">مسارات الترجمة</string>
+    <string name="meta_aspect">نسبة العرض</string>
+    <string name="meta_bitrate">معدل البت</string>
+    <string name="meta_tracks">المسارات</string>
+    <string name="meta_unknown">غير معروف</string>
+    <string name="meta_fps_value">%1$.2f إطار/ث</string>
+    <string name="inspect_failed">تعذّر فحص هذا الملف. قد يكون غير مدعوم أو تالفًا.</string>
+</resources>

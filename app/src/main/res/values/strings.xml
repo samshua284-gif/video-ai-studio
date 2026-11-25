@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Video AI Studio</string>
+    <string name="dashboard_tagline">From cut to final share, crafted freely.</string>
+    <string name="import_video">Import Video</string>
+    <string name="import_hint">Pick a video to inspect its real metadata and preview it. The original file is never modified.</string>
+    <string name="tool_arrives">This tool is implemented in Milestone %1$d.</string>
+    <string name="back">Back</string>
+
+    <string name="tool_enhance">AI Video Enhancement</string>
+    <string name="tool_4k">4K Upscaling</string>
+    <string name="tool_noise">Noise Removal</string>
+    <string name="tool_mp3">Extract MP3</string>
+    <string name="tool_transcribe">Transcription</string>
+    <string name="tool_translate">Translation</string>
+    <string name="tool_subtitles">Subtitle Generator</string>
+    <string name="tool_compress">Video Compressor</string>
+    <string name="tool_trim">Video Trimmer</string>
+    <string name="tool_audio">Audio Enhancement</string>
+    <string name="tool_batch">Batch Processing</string>
+    <string name="tool_queue">Processing Queue</string>
+    <string name="tool_history">History</string>
+    <string name="tool_settings">Settings</string>
+
+    <string name="meta_file_name">File name</string>
+    <string name="meta_duration">Duration</string>
+    <string name="meta_size">File size</string>
+    <string name="meta_resolution">Resolution</string>
+    <string name="meta_fps">Frame rate</string>
+    <string name="meta_video_codec">Video codec</string>
+    <string name="meta_audio_codec">Audio codec</string>
+    <string name="meta_audio_tracks">Audio tracks</string>
+    <string name="meta_subtitle_tracks">Subtitle tracks</string>
+    <string name="meta_aspect">Aspect ratio</string>
+    <string name="meta_bitrate">Bitrate</string>
+    <string name="meta_tracks">Tracks</string>
+    <string name="meta_unknown">Unknown</string>
+    <string name="meta_fps_value">%1$.2f fps</string>
+    <string name="inspect_failed">Could not inspect this file. It may be unsupported or corrupted.</string>
+</resources>
