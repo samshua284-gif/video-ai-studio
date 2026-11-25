@@ -84,6 +84,10 @@
     <string name="m3_soften">Soften the start (gentle 0.8 s fade-in — dissolves a recording-start thump)</string>
     <string name="m3_preclean">Neural clean-up before enhancing (for noisy sources — enhancement alone polishes the noise too)</string>
     <string name="m3_mute">Mute the first seconds (seconds — removes a recording-start thump completely; wanted sound inside the window is muted too)</string>
+    <string name="m3_blend">Clarity balance — mixing some original back restores the consonant bite the suppressor eats</string>
+    <string name="m3_blend_full">Full clean</string>
+    <string name="m3_blend_balanced">Balanced</string>
+    <string name="m3_blend_clear">More clarity</string>
     <string name="m3_engine_note">The first three modes are real spectral processing (adaptive FFT). Neural mode runs the RNNoise network on-device — trained to separate speech from noise. Compare before/after below and judge by ear.</string>
     <string name="m3_enhance_note">Cuts rumble below 60 Hz, lifts speech presence at 3 kHz, and normalizes loudness to -16 LUFS. The picture is copied untouched.</string>
     <string name="m3_compare">Compare before / after</string>

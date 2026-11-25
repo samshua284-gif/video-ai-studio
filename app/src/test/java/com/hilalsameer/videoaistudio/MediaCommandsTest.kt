@@ -61,6 +61,23 @@ class MediaCommandsTest {
     }
 
     @Test
+    fun blendAlignsTheDryPath() {
+        val neural = MediaCommands.denoiseNeural(
+            "in.mp4", "out.mp4", "/data/files/std.rnnn", wet = 0.7f
+        ).joinToString(" ")
+        assertTrue(neural.contains("adelay=10"))
+        assertTrue(neural.contains("weights='0.30 0.70'"))
+        assertTrue(neural.contains("amix"))
+        val spectral = MediaCommands.denoise("in.mp4", "out.mp4", 1, wet = 0.5f)
+            .joinToString(" ")
+        assertTrue(spectral.contains("adelay=25"))
+        assertTrue(spectral.contains("weights='0.50 0.50'"))
+        // Full-clean keeps the legacy single-chain form.
+        val full = MediaCommands.denoise("in.mp4", "out.mp4", 1).joinToString(" ")
+        assertTrue(!full.contains("amix"))
+    }
+
+    @Test
     fun enhancePreCleanInsertsRnnoiseBeforePolish() {
         val plain = MediaCommands.enhanceAudio("in.mp4", "out.mp4").joinToString(" ")
         assertTrue(!plain.contains("arnndn"))

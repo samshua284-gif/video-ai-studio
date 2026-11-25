@@ -80,6 +80,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     var softenStart by remember { mutableStateOf(true) }
     var preClean by remember { mutableStateOf(true) }
     var muteStart by remember { mutableStateOf(1.0f) }
+    var clarityWet by remember { mutableStateOf(0.7f) }
     var previewProcessed by remember { mutableStateOf(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
@@ -165,10 +166,10 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     MediaCommands.denoiseNeural(
                         input.absolutePath, outFile.absolutePath, modelFile!!.absolutePath,
                         preroll = info.durationMs >= 3000, softenStart = softenStart,
-                        muteStartSec = muteStart
+                        muteStartSec = muteStart, wet = clarityWet
                     )
                 } else if (kind == AudioKind.NOISE) {
-                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart, muteStart)
+                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart, muteStart, clarityWet)
                 } else {
                     MediaCommands.enhanceAudio(
                         input.absolutePath, outFile.absolutePath,
@@ -280,6 +281,27 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         ) else ButtonDefaults.outlinedButtonColors()
                     ) { Text(if (sec == 0f) "0" else sec.toString()) }
+                }
+            }
+            Text(
+                stringResource(R.string.m3_blend),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                listOf(
+                    1.0f to R.string.m3_blend_full,
+                    0.7f to R.string.m3_blend_balanced,
+                    0.5f to R.string.m3_blend_clear
+                ).forEach { (wetValue, labelRes) ->
+                    val selected = clarityWet == wetValue
+                    OutlinedButton(
+                        onClick = { clarityWet = wetValue },
+                        modifier = Modifier.padding(end = 6.dp),
+                        colors = if (selected) ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) else ButtonDefaults.outlinedButtonColors()
+                    ) { Text(stringResource(labelRes)) }
                 }
             }
             Text(

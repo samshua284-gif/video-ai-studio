@@ -110,9 +110,13 @@ object MediaCommands {
         return "volume='if(lt(t,$m),0,if(lt(t,$r),(t-$m)/0.15,1))':eval=frame"
     }
 
+    private fun fmt2(v: Float): String =
+        String.format(java.util.Locale.US, "%.2f", v)
+
     fun denoise(
         input: String, output: String, mode: Int,
-        softenStart: Boolean = false, muteStartSec: Float = 0f
+        softenStart: Boolean = false, muteStartSec: Float = 0f,
+        wet: Float = 1f
     ): Array<String> {
         val (nr, nf, tn) = denoiseModes[mode.coerceIn(0, 2)]
         val afftdn = buildString {
@@ -121,6 +125,30 @@ object MediaCommands {
         }
         val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
         val mute = if (muteStartSec > 0f) ",${muteStartFilter(muteStartSec)}" else ""
+        if (wet < 0.999f) {
+            // Clarity blend: mix the untouched original back in so
+            // consonant articulation (eaten by the suppressor as if
+            // it were noise) returns. The dry path is DELAYED to the
+            // wet path's measured latency — afftdn at 48 kHz lags
+            // 1200 samples = 25 ms (impulse-measured) — otherwise the
+            // two copies comb-filter and smear the very articulation
+            // being restored (un-aligned blend measured speech at
+            // -16.7 dB vs -12.8 dB aligned). Fade/mute ride post-mix
+            // so the dry path cannot resurrect the start thump.
+            val w = fmt2(wet); val d = fmt2(1f - wet)
+            return arrayOf(
+                "-y", "-i", input,
+                "-filter_complex",
+                "[0:a]asplit=2[dry][wp];" +
+                    "[dry]aresample=48000,adelay=25[d];" +
+                    "[wp]aresample=48000,highpass=f=70,$afftdn[w];" +
+                    "[d][w]amix=inputs=2:weights='$d $w':normalize=0[mix];" +
+                    "[mix]anull$fade$mute[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+                output
+            )
+        }
         return arrayOf(
             "-y", "-i", input,
             "-af", "highpass=f=70,$afftdn$fade$mute",
@@ -150,7 +178,7 @@ object MediaCommands {
     fun denoiseNeural(
         input: String, output: String, modelPath: String,
         preroll: Boolean = true, softenStart: Boolean = false,
-        muteStartSec: Float = 0f
+        muteStartSec: Float = 0f, wet: Float = 1f
     ): Array<String> {
         // Soften-start: a gentle 0.8 s fade-in. It exists because a
         // one-off event in the source (a recording-start thump) is
@@ -161,6 +189,31 @@ object MediaCommands {
         // -32.5 dB with the fade).
         val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
         val mute = if (muteStartSec > 0f) ",${muteStartFilter(muteStartSec)}" else ""
+        if (wet < 0.999f) {
+            // Clarity blend (see denoise()): the dry path is delayed
+            // by arnndn's measured latency — 480 samples = 10 ms at
+            // 48 kHz, impulse-verified — then mixed; fade/mute ride
+            // post-mix.
+            val w = fmt2(wet); val d = fmt2(1f - wet)
+            val head = "[0:a]asplit=2[dry][np];[dry]aresample=48000,adelay=10[d];"
+            val mix = "[d][w]amix=inputs=2:weights='$d $w':normalize=0[mix];" +
+                "[mix]anull$fade$mute[aout]"
+            val graph = if (preroll) {
+                head + "[np]highpass=f=70,aresample=48000,asplit=2[hd][bd];" +
+                    "[hd]atrim=end=1.5,asetpts=PTS-STARTPTS[pre];" +
+                    "[pre][bd]concat=n=2:v=0:a=1,arnndn=m='$modelPath'," +
+                    "atrim=start=1.5,asetpts=PTS-STARTPTS[w];" + mix
+            } else {
+                head + "[np]highpass=f=70,aresample=48000,arnndn=m='$modelPath'[w];" + mix
+            }
+            return arrayOf(
+                "-y", "-i", input,
+                "-filter_complex", graph,
+                "-map", "0:v", "-map", "[aout]",
+                "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+                output
+            )
+        }
         return if (preroll) {
             arrayOf(
                 "-y", "-i", input,
