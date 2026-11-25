@@ -180,9 +180,18 @@ object MediaCommands {
         // gate in the chain measured NO improvement and was dropped.
         val clean = if (preClean && modelPath != null)
             "aresample=48000,arnndn=m='$modelPath'," else ""
+        // The gate sits before the polish: on an already-cleaned
+        // (quiet) file, loudnorm's gain otherwise lifts the neural
+        // residue warbling in the silences into audibility — the
+        // owner's "تشويش" report came from enhancing a denoised
+        // file. Host measurement on a quiet cleaned source: speech
+        // lift identical (-10.9 dB), gap residue -62.6 dB plain vs
+        // -86.3 dB gated. On raw noisy sources the floor sits above
+        // the gate threshold, so the gate is a harmless no-op there.
+        val gate = "agate=threshold=0.004:ratio=2:attack=5:release=150,"
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=60,${clean}equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-af", "highpass=f=60,${clean}${gate}equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )

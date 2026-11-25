@@ -71,6 +71,10 @@ class MediaCommandsTest {
         assertTrue(cleaned.contains("arnndn=m='/data/files/std.rnnn'"))
         // RNNoise must run BEFORE the equalizer/loudnorm polish.
         assertTrue(cleaned.indexOf("arnndn") < cleaned.indexOf("loudnorm"))
+        // The residue gate is always in the enhance chain, before
+        // loudnorm (it only engages when the floor is truly low).
+        assertTrue(plain.contains("agate=threshold=0.004"))
+        assertTrue(plain.indexOf("agate") < plain.indexOf("loudnorm"))
     }
 
     @Test
