@@ -54,6 +54,8 @@ import com.hilalsameer.videoaistudio.data.aspectRatio
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
+import com.hilalsameer.videoaistudio.ui.AudioKind
+import com.hilalsameer.videoaistudio.ui.AudioToolScreen
 import com.hilalsameer.videoaistudio.ui.MediaToolScreen
 import com.hilalsameer.videoaistudio.ui.ToolKind
 import com.hilalsameer.videoaistudio.ui.VideoAIStudioTheme
@@ -122,6 +124,8 @@ fun StudioApp() {
                 3 -> MediaToolScreen(ToolKind.EXTRACT, state, onBack = { nav.popBackStack() })
                 7 -> MediaToolScreen(ToolKind.COMPRESS, state, onBack = { nav.popBackStack() })
                 8 -> MediaToolScreen(ToolKind.TRIM, state, onBack = { nav.popBackStack() })
+                2 -> AudioToolScreen(AudioKind.NOISE, state, onBack = { nav.popBackStack() })
+                9 -> AudioToolScreen(AudioKind.ENHANCE, state, onBack = { nav.popBackStack() })
                 else -> ToolStatusScreen(tool = TOOLS[idx], onBack = { nav.popBackStack() })
             }
         }

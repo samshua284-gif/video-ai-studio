@@ -67,4 +67,16 @@
     <string name="m2_saved">حُفظ.</string>
     <string name="m2_range_error">راجع النطاق: النهاية بعد البداية وداخل المدة.</string>
     <string name="m2_change_video">استيراد فيديو آخر</string>
+
+    <string name="m3_run_noise">إزالة الضوضاء</string>
+    <string name="m3_run_enhance">تحسين الصوت</string>
+    <string name="m3_mode">قوة إزالة الضوضاء</string>
+    <string name="m3_mode_light">خفيفة — لطيفة، الأسلم للكلام</string>
+    <string name="m3_mode_balanced">متوازنة — تتبّع تكيّفي</string>
+    <string name="m3_mode_strong">قوية — أقصى إزالة، قد تُخفت الكلام</string>
+    <string name="m3_engine_note">معالجة طيفية حقيقية (مزيل ضوضاء FFT تكيّفي) على هذا الجهاز — ليست شبكة عصبية. الأوضاع القوية قد تُحدث تشوّهات؛ قارن قبل/بعد أدناه.</string>
+    <string name="m3_enhance_note">يقطع الطنين تحت 60 Hz، ويرفع حضور الكلام عند 3 kHz، ويوحّد علوّ الصوت إلى -16 LUFS. الصورة تُنسخ دون مساس.</string>
+    <string name="m3_compare">مقارنة قبل / بعد</string>
+    <string name="m3_before">الأصل</string>
+    <string name="m3_after">بعد المعالجة</string>
 </resources>

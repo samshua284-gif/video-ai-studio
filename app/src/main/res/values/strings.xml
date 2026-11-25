@@ -67,4 +67,16 @@
     <string name="m2_saved">Saved.</string>
     <string name="m2_range_error">Check the range: end must be after start and within the duration.</string>
     <string name="m2_change_video">Import another video</string>
+
+    <string name="m3_run_noise">Remove noise</string>
+    <string name="m3_run_enhance">Enhance audio</string>
+    <string name="m3_mode">Noise reduction strength</string>
+    <string name="m3_mode_light">Light — gentle, safest for speech</string>
+    <string name="m3_mode_balanced">Balanced — adaptive tracking</string>
+    <string name="m3_mode_strong">Strong — maximum reduction, may dull speech</string>
+    <string name="m3_engine_note">Real spectral processing (adaptive FFT denoiser) on this device — not a neural network. Strong modes can introduce artifacts; compare before/after below.</string>
+    <string name="m3_enhance_note">Cuts rumble below 60 Hz, lifts speech presence at 3 kHz, and normalizes loudness to -16 LUFS. The picture is copied untouched.</string>
+    <string name="m3_compare">Compare before / after</string>
+    <string name="m3_before">Original</string>
+    <string name="m3_after">Processed</string>
 </resources>

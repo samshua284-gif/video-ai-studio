@@ -58,6 +58,43 @@ object MediaCommands {
             output
         )
 
+    /** Denoise modes: (noise reduction dB, noise floor dB, tracking). */
+    val denoiseModes = listOf(
+        Triple(8, -30, false),
+        Triple(14, -22, true),
+        Triple(24, -14, true)
+    )
+
+    /**
+     * Noise removal (TD-003): adaptive FFT spectral denoising of the
+     * audio track; the video stream is copied untouched.
+     */
+    fun denoise(input: String, output: String, mode: Int): Array<String> {
+        val (nr, nf, tn) = denoiseModes[mode.coerceIn(0, 2)]
+        val afftdn = buildString {
+            append("afftdn=nr=$nr:nf=$nf")
+            if (tn) append(":tn=1")
+        }
+        return arrayOf(
+            "-y", "-i", input,
+            "-af", "highpass=f=70,$afftdn",
+            "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+            output
+        )
+    }
+
+    /**
+     * Audio enhancement: rumble cut, presence lift for speech clarity,
+     * and loudness normalization to -16 LUFS. Video copied untouched.
+     */
+    fun enhanceAudio(input: String, output: String): Array<String> =
+        arrayOf(
+            "-y", "-i", input,
+            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+            output
+        )
+
     /** Null when the range is usable, else a short machine-readable reason. */
     fun trimRangeError(startSec: Double, endSec: Double, durationSec: Double): String? = when {
         startSec < 0.0 -> "start_negative"

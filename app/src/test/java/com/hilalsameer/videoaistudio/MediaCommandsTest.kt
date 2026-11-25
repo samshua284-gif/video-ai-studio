@@ -45,6 +45,24 @@ class MediaCommandsTest {
     }
 
     @Test
+    fun denoiseModesBuildAfftdnChains() {
+        val light = MediaCommands.denoise("in.mp4", "out.mp4", 0).joinToString(" ")
+        assertTrue(light.contains("afftdn=nr=8:nf=-30"))
+        assertTrue(!light.contains("tn=1"))
+        val strong = MediaCommands.denoise("in.mp4", "out.mp4", 2).joinToString(" ")
+        assertTrue(strong.contains("afftdn=nr=24:nf=-14:tn=1"))
+        assertTrue(strong.contains("highpass=f=70"))
+        assertTrue(strong.contains("-codec:v copy"))
+    }
+
+    @Test
+    fun enhanceChainNormalizesLoudness() {
+        val joined = MediaCommands.enhanceAudio("in.mp4", "out.mp4").joinToString(" ")
+        assertTrue(joined.contains("loudnorm=I=-16:TP=-1.5:LRA=11"))
+        assertTrue(joined.contains("equalizer=f=3000"))
+    }
+
+    @Test
     fun trimRangeValidation() {
         assertNull(MediaCommands.trimRangeError(0.0, 10.0, 60.0))
         assertEquals("start_negative", MediaCommands.trimRangeError(-1.0, 10.0, 60.0))

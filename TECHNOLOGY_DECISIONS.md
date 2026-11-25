@@ -24,6 +24,39 @@ time**, in any milestone. Concretely for this app:
 Any future proposal that needs a connection at use time is rejected
 by this decision unless the owner himself amends it.
 
+## TD-003 — Noise removal & audio enhancement engine (2026-11-25)
+
+**Verified present in the shipped engine binary** (strings of the
+FFmpegKit 6.0-2 arm64 `libavfilter.so`, checked 2026-11-25):
+`afftdn`, `anlmdn`, `arnndn`, `highpass`, `loudnorm`, `equalizer`,
+`acompressor` — all available offline, no new dependency.
+
+**Decision:** noise removal is built on FFmpeg's **afftdn** (adaptive
+FFT spectral denoiser with noise-floor tracking), preceded by a
+70 Hz high-pass. Three user modes vary reduction strength and floor:
+Light (nr=8, nf=−30), Balanced (nr=14, nf=−22, tracking on),
+Strong (nr=24, nf=−14, tracking on). Audio enhancement is a separate
+chain: high-pass 60 Hz + presence equalizer (+3 dB @ 3 kHz) +
+loudnorm to −16 LUFS. The video stream is copied untouched; only the
+audio is processed. The UI labels this honestly as spectral DSP
+noise reduction — not a neural network.
+
+**Objective host-side measurement** (VM FFmpeg, identical chains,
+pink noise at −20.3 dB mean): Light −4.6 dB, Balanced −5.0 dB,
+Strong −5.2 dB broadband reduction; a 196 Hz tone mixed in noise
+survived processing (mix level fell ≈3 dB, i.e. mostly the noise
+component). Genuine but moderate — exactly what spectral DSP
+delivers on steady noise; speech-gap behaviour is the device field
+test's to judge.
+
+**Neural path (arnndn + RNNoise):** the filter is present in the
+binary, but it needs an external `.rnnn` model file, and no model
+with clean, verifiable provenance/licensing for redistribution was
+secured at decision time. Per Command 3's own fallback clause, the
+genuine DSP solution ships now and the neural upgrade stays an open,
+documented path — it must not be faked or bundled from a murky
+source.
+
 ## TD-001 — Media engine for Milestone 2 (2026-11-25)
 
 **Decision:** FFmpegKit `com.arthenica:ffmpeg-kit-full-gpl:6.0-2`
