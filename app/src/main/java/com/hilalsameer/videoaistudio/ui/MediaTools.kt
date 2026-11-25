@@ -61,7 +61,7 @@ private sealed interface JobUi {
     data object Preparing : JobUi
     data class Running(val fraction: Float) : JobUi
     data class Done(val file: File, val report: ValidationReport) : JobUi
-    data class Failed(val logTail: String) : JobUi
+    data class Failed(val excerpt: String, val logTail: String) : JobUi
     data object Cancelled : JobUi
 }
 
@@ -212,10 +212,10 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                         val report = withContext(Dispatchers.IO) { validateExport(outFile) }
                         job = JobUi.Done(outFile, report)
                     }
-                    else -> job = JobUi.Failed(result.output.takeLast(600))
+                    else -> job = JobUi.Failed(MediaCommands.errorExcerpt(result.output), result.output.takeLast(600))
                 }
             } catch (e: Exception) {
-                job = JobUi.Failed(e.message ?: "error")
+                job = JobUi.Failed(e.message ?: "error", e.message ?: "error")
             }
         }
     }
@@ -376,6 +376,13 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
             is JobUi.Failed -> {
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.m2_failed), color = MaterialTheme.colorScheme.error)
+                Text(
+                    j.excerpt,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
                 Text(j.logTail, style = MaterialTheme.typography.bodySmall)
             }
             is JobUi.Cancelled -> {

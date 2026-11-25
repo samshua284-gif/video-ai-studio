@@ -47,11 +47,27 @@ class MediaCommandsTest {
         assertTrue(joined.contains("scale=-2:720"))
         assertTrue(!joined.contains("min("))
         assertTrue(joined.contains("26"))
+        // ORDER matters: "-i" must be immediately followed by the
+        // input path, and the -vf pair must come after it (an earlier
+        // build inserted -vf between them and FFmpeg tried to open a
+        // file named "-vf").
+        assertTrue(args[1] == "-i" && args[2] == "in.mp4")
+        assertTrue(args.indexOf("-vf") == 3 && args[4] == "scale=-2:720")
         // Shorter than the cap: no scale filter at all.
         val passthrough = MediaCommands.compress(
             "in.mp4", "out.mp4", crf = 20, maxHeight = 1080, sourceHeight = 720
         ).joinToString(" ")
         assertTrue(!passthrough.contains("scale="))
+    }
+
+    @Test
+    fun errorExcerptFindsTheCause() {
+        val log = "ffmpeg version 6.0\nInput #0, mov, from 'x':\n" +
+            "Stream mapping:\n  Stream #0:0 -> #0:0\n" +
+            "vf: No such file or directory\nConversion failed!"
+        val excerpt = MediaCommands.errorExcerpt(log)
+        assertTrue(excerpt.contains("No such file or directory"))
+        assertTrue(!excerpt.contains("ffmpeg version"))
     }
 
     @Test

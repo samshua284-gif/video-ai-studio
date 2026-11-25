@@ -65,7 +65,7 @@ private sealed interface AudioJob {
     data object Preparing : AudioJob
     data class Running(val fraction: Float) : AudioJob
     data class Done(val input: File, val file: File, val report: ValidationReport) : AudioJob
-    data class Failed(val logTail: String) : AudioJob
+    data class Failed(val excerpt: String, val logTail: String) : AudioJob
     data object Cancelled : AudioJob
 }
 
@@ -175,10 +175,10 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         previewProcessed = true
                         job = AudioJob.Done(input, outFile, report)
                     }
-                    else -> job = AudioJob.Failed(result.output.takeLast(600))
+                    else -> job = AudioJob.Failed(MediaCommands.errorExcerpt(result.output), result.output.takeLast(600))
                 }
             } catch (e: Exception) {
-                job = AudioJob.Failed(e.message ?: "error")
+                job = AudioJob.Failed(e.message ?: "error", e.message ?: "error")
             }
         }
     }
@@ -327,6 +327,13 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
             is AudioJob.Failed -> {
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.m2_failed), color = MaterialTheme.colorScheme.error)
+                Text(
+                    j.excerpt,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(vertical = 6.dp)
+                )
                 Text(j.logTail, style = MaterialTheme.typography.bodySmall)
             }
             is AudioJob.Cancelled -> {

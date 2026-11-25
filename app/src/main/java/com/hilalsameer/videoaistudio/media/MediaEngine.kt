@@ -68,7 +68,12 @@ object MediaCommands {
         )
         if (sourceHeight <= maxHeight) return base
         val withScale = base.toMutableList()
-        withScale.addAll(2, listOf("-vf", "scale=-2:$maxHeight"))
+        // Index 3 = immediately AFTER the input path. The first fix
+        // inserted at index 2, between "-i" and the input, so FFmpeg
+        // tried to open a file named "-vf" (owner's log, 2026-11-25:
+        // "vf: No such file or directory"). The unit test now asserts
+        // argument ORDER, not just presence.
+        withScale.addAll(3, listOf("-vf", "scale=-2:$maxHeight"))
         return withScale.toTypedArray()
     }
 
@@ -159,6 +164,26 @@ object MediaCommands {
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
+
+    private val errorNeedles = listOf(
+        "error", "no such", "invalid", "failed", "cannot", "out of range",
+        "not found", "denied", "unsupported"
+    )
+
+    /**
+     * The diagnostic heart of an FFmpeg log: the last few lines that
+     * actually carry an error, so a failure card (and a screenshot of
+     * it) shows the cause first instead of burying it under the
+     * banner. Falls back to the plain tail when nothing matches.
+     */
+    fun errorExcerpt(output: String, maxLines: Int = 3): String {
+        val hits = output.lines().filter { line ->
+            val low = line.lowercase()
+            errorNeedles.any { it in low }
+        }
+        return if (hits.isEmpty()) output.takeLast(300)
+        else hits.takeLast(maxLines).joinToString("\n")
+    }
 
     /** Null when the range is usable, else a short machine-readable reason. */
     fun trimRangeError(startSec: Double, endSec: Double, durationSec: Double): String? = when {
