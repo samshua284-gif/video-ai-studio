@@ -65,6 +65,11 @@
     <string name="m2_result_path">محفوظ داخل التطبيق في</string>
     <string name="m2_save">حفظ في الاستيديو</string>
     <string name="m2_saved_gallery">حُفظ في الاستيديو ✓</string>
+    <string name="m2_chk_exists">الملف موجود</string>
+    <string name="m2_chk_size">الحجم أكبر من صفر</string>
+    <string name="m2_chk_duration">المدة مقروءة</string>
+    <string name="m2_chk_tracks">يحتوي مسارات وسائط</string>
+    <string name="m2_chk_sample">أول عينة قابلة للقراءة</string>
     <string name="m2_saved">حُفظ.</string>
     <string name="m2_range_error">راجع النطاق: النهاية بعد البداية وداخل المدة.</string>
     <string name="m2_change_video">استيراد فيديو آخر</string>

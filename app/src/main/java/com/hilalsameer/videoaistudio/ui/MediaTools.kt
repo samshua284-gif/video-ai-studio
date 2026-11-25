@@ -357,6 +357,11 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                         ResultRow(stringResource(R.string.m2_result_size), formatSize(j.report.sizeBytes))
                         ResultRow(stringResource(R.string.m2_result_duration), formatDuration(j.report.durationMs))
                         ResultRow(stringResource(R.string.m2_result_tracks), j.report.trackCount.toString())
+                        ResultRow(stringResource(R.string.m2_chk_exists), if (j.report.exists) "✓" else "✗")
+                        ResultRow(stringResource(R.string.m2_chk_size), if (j.report.sizeBytes > 0) "✓" else "✗")
+                        ResultRow(stringResource(R.string.m2_chk_duration), if (j.report.durationMs > 0) "✓" else "✗")
+                        ResultRow(stringResource(R.string.m2_chk_tracks), if (j.report.trackCount > 0) "✓" else "✗")
+                        ResultRow(stringResource(R.string.m2_chk_sample), if (j.report.firstSampleReadable) "✓" else "✗")
                         ResultRow(stringResource(R.string.m2_result_path), j.file.absolutePath)
                         Spacer(Modifier.height(10.dp))
                         Button(

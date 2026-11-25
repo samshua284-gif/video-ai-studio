@@ -305,6 +305,11 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         ARow(stringResource(R.string.m2_result_size), formatSize(j.report.sizeBytes))
                         ARow(stringResource(R.string.m2_result_duration), formatDuration(j.report.durationMs))
                         ARow(stringResource(R.string.m2_result_tracks), j.report.trackCount.toString())
+                        ARow(stringResource(R.string.m2_chk_exists), if (j.report.exists) "✓" else "✗")
+                        ARow(stringResource(R.string.m2_chk_size), if (j.report.sizeBytes > 0) "✓" else "✗")
+                        ARow(stringResource(R.string.m2_chk_duration), if (j.report.durationMs > 0) "✓" else "✗")
+                        ARow(stringResource(R.string.m2_chk_tracks), if (j.report.trackCount > 0) "✓" else "✗")
+                        ARow(stringResource(R.string.m2_chk_sample), if (j.report.firstSampleReadable) "✓" else "✗")
                         Spacer(Modifier.height(10.dp))
                         Text(stringResource(R.string.m3_compare), style = MaterialTheme.typography.titleSmall)
                         Row(modifier = Modifier.padding(top = 6.dp)) {

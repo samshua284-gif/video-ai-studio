@@ -45,11 +45,23 @@ fun validateExport(file: File): ValidationReport {
     try {
         extractor.setDataSource(file.absolutePath)
         tracks = extractor.trackCount
-        if (tracks > 0) {
-            extractor.selectTrack(0)
-            // A readable first sample proves the stream actually decodes.
-            val buf = java.nio.ByteBuffer.allocate(64 * 1024)
-            sampleOk = extractor.readSampleData(buf, 0) >= 0
+        // A readable first sample on ANY media track proves the file
+        // decodes. Probing track 0 only (the first version) failed
+        // files whose track 0 is a metadata track — common in phone
+        // recordings — while they played perfectly (owner's
+        // 217946.mp4, 2026-11-25: size/duration/tracks all correct,
+        // playback fine, card still said "not validated").
+        val buf = java.nio.ByteBuffer.allocate(64 * 1024)
+        for (t in 0 until tracks) {
+            try {
+                extractor.selectTrack(t)
+                extractor.seekTo(0L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                if (extractor.readSampleData(buf, 0) >= 0) sampleOk = true
+                extractor.unselectTrack(t)
+            } catch (e: Exception) {
+                // An unprobable track does not decide the verdict.
+            }
+            if (sampleOk) break
         }
     } catch (e: Exception) {
         // tracks/sampleOk stay at failure values
