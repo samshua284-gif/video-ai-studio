@@ -38,10 +38,20 @@ class MediaCommandsTest {
 
     @Test
     fun compressScalesAndSetsCrf() {
-        val args = MediaCommands.compress("in.mp4", "out.mp4", crf = 26, maxHeight = 720)
+        // Taller than the cap: explicit scale, no filter expression
+        // (a comma inside min() breaks the graph parser — field bug).
+        val args = MediaCommands.compress(
+            "in.mp4", "out.mp4", crf = 26, maxHeight = 720, sourceHeight = 1280
+        )
         val joined = args.joinToString(" ")
-        assertTrue(joined.contains("scale=-2:min(720,ih)"))
+        assertTrue(joined.contains("scale=-2:720"))
+        assertTrue(!joined.contains("min("))
         assertTrue(joined.contains("26"))
+        // Shorter than the cap: no scale filter at all.
+        val passthrough = MediaCommands.compress(
+            "in.mp4", "out.mp4", crf = 20, maxHeight = 1080, sourceHeight = 720
+        ).joinToString(" ")
+        assertTrue(!passthrough.contains("scale="))
     }
 
     @Test

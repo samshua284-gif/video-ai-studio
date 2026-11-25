@@ -190,7 +190,9 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                             else -> 26 to 720
                         }
                         val f = File(outDir, base + "_compressed.mp4")
-                        f to MediaCommands.compress(input.absolutePath, f.absolutePath, crf, maxH)
+                        f to MediaCommands.compress(
+                            input.absolutePath, f.absolutePath, crf, maxH, info.displayHeight
+                        )
                     }
                 }
                 job = JobUi.Running(0f)

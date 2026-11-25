@@ -48,15 +48,29 @@ object MediaCommands {
             output
         )
 
-    /** Compress: H.264 at the given CRF, downscaling to maxHeight if taller. */
-    fun compress(input: String, output: String, crf: Int, maxHeight: Int): Array<String> =
-        arrayOf(
+    /**
+     * Compress: H.264 at the given CRF, downscaling to maxHeight if
+     * taller. The scale decision is made HERE, not in a filter
+     * expression: the first build used `scale=-2:min(720,ih)` and the
+     * filtergraph parser split on the comma inside min(), failing
+     * with "No such filter: 'ih)'" on every input (owner's device log,
+     * 2026-11-25; reproduced on the host the same day). An explicit
+     * target height has no comma to split on.
+     */
+    fun compress(
+        input: String, output: String, crf: Int, maxHeight: Int, sourceHeight: Int
+    ): Array<String> {
+        val base = arrayOf(
             "-y", "-i", input,
-            "-vf", "scale=-2:min($maxHeight,ih)",
             "-codec:v", "libx264", "-preset", "veryfast", "-crf", crf.toString(),
             "-codec:a", "aac", "-b:a", "128k",
             output
         )
+        if (sourceHeight <= maxHeight) return base
+        val withScale = base.toMutableList()
+        withScale.addAll(2, listOf("-vf", "scale=-2:$maxHeight"))
+        return withScale.toTypedArray()
+    }
 
     /**
      * Denoise modes: (noise reduction dB, noise floor dB, tracking).
@@ -82,7 +96,7 @@ object MediaCommands {
         }
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=70,$afftdn,aresample=async=1:min_hard_comp=0.100",
+            "-af", "highpass=f=70,$afftdn",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
@@ -98,7 +112,7 @@ object MediaCommands {
     fun denoiseNeural(input: String, output: String, modelPath: String): Array<String> =
         arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath',aresample=async=1:min_hard_comp=0.100",
+            "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
@@ -110,7 +124,11 @@ object MediaCommands {
     fun enhanceAudio(input: String, output: String): Array<String> =
         arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=async=1:min_hard_comp=0.100",
+            // loudnorm stays LAST: an aresample appended after it in
+            // 0.3.1 could not negotiate a channel layout with the
+            // encoder on FFmpeg 6.0 and failed the whole conversion
+            // (owner's device log, 2026-11-25).
+            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )

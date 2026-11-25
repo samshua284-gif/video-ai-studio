@@ -35,7 +35,15 @@ device field verification by the owner).
   `MediaCommandsTest` covering the exact FFmpeg argument arrays and
   the trim-range validation).
 - **C/D — Functionality & output validation (device, owner-run):**
-  - Compress produced a real `…-compressed.mp4` on the device.
+  - Compress: **correction (2026-11-25)** — the original claim here
+    rested on a filename the owner imported; that file's hyphenated
+    name did not match this app's `_compressed.mp4` pattern, and the
+    owner's device log later proved compress had NEVER worked: the
+    `scale=-2:min(…,ih)` filter expression is split by the
+    filtergraph parser at the comma inside `min()`, failing with
+    "No such filter: 'ih)'" (reproduced on the host). Fixed in 0.3.4
+    by computing the scale decision in Kotlin and passing an
+    explicit target height; field re-verification pending.
   - MP3 extraction from an audible 0:24 clip: result card "Done —
     export validated", output 565.39 KB (≈ 24 s × 192 kbps),
     duration 0:24 (matches source), 1 track, saved under the app's
