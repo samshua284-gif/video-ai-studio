@@ -93,6 +93,8 @@
     <string name="m3_compare">مقارنة قبل / بعد</string>
     <string name="m3_play">تشغيل</string>
     <string name="m3_pause">إيقاف مؤقت</string>
+    <string name="m3_fullscreen">ملء الشاشة</string>
+    <string name="m3_close">إغلاق</string>
     <string name="m3_before">الأصل</string>
     <string name="m3_after">بعد المعالجة</string>
 </resources>

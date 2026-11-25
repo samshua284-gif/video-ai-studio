@@ -17,8 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.foundation.background
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -506,6 +510,7 @@ private fun ComparePlayer(file: File, playSignal: Int) {
     // failure names itself on screen instead of staying invisible.
     var errorText by remember(file.absolutePath) { mutableStateOf<String?>(null) }
     var playing by remember(file.absolutePath) { mutableStateOf(false) }
+    var fullscreen by remember(file.absolutePath) { mutableStateOf(false) }
     val player = remember(file.absolutePath) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
@@ -541,11 +546,52 @@ private fun ComparePlayer(file: File, playSignal: Int) {
             player.play()
         }
     }
+    // 0.4.4 (owner's request): while playing, the video can open
+    // in an external full-screen frame — the inline box is small
+    // for a portrait phone video. The SAME player instance moves
+    // its surface into the dialog, so playback continues from the
+    // same position; closing the frame hands the surface back to
+    // the inline view (the update block re-attaches it).
+    if (fullscreen) {
+        Dialog(
+            onDismissRequest = { fullscreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().background(Color.Black)
+                    .padding(12.dp)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply { this.player = player; useController = false }
+                    },
+                    modifier = Modifier.fillMaxWidth().weight(1f)
+                )
+                Row(modifier = Modifier.padding(top = 8.dp)) {
+                    Button(onClick = {
+                        if (playing) player.pause() else {
+                            if (player.playbackState ==
+                                androidx.media3.common.Player.STATE_ENDED
+                            ) player.seekTo(0)
+                            player.play()
+                        }
+                    }) {
+                        Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
+                    }
+                    Spacer(Modifier.padding(6.dp))
+                    OutlinedButton(onClick = { fullscreen = false }) {
+                        Text(stringResource(R.string.m3_close))
+                    }
+                }
+            }
+        }
+    }
     Column {
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply { this.player = player; useController = false }
             },
+            update = { view -> if (!fullscreen) view.player = player },
             modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
         )
         Row(modifier = Modifier.padding(top = 6.dp)) {
@@ -558,6 +604,10 @@ private fun ComparePlayer(file: File, playSignal: Int) {
                 }
             }) {
                 Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
+            }
+            Spacer(Modifier.padding(6.dp))
+            OutlinedButton(onClick = { fullscreen = true }) {
+                Text(stringResource(R.string.m3_fullscreen))
             }
         }
         if (errorText != null) {
