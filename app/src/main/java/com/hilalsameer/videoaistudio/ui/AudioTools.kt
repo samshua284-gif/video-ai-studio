@@ -51,6 +51,7 @@ import com.hilalsameer.videoaistudio.media.MediaEngine
 import com.hilalsameer.videoaistudio.media.ValidationReport
 import com.hilalsameer.videoaistudio.media.exportsDir
 import com.hilalsameer.videoaistudio.media.prepareInputFile
+import com.hilalsameer.videoaistudio.media.saveToGallery
 import com.hilalsameer.videoaistudio.media.validateExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,7 +81,8 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
     val runRes = if (kind == AudioKind.NOISE) R.string.m3_run_noise else R.string.m3_run_enhance
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    // Gallery (photo) picker, videos only — owner requirement.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -97,6 +99,12 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         }
     }
 
+    val videoPickerRequest = androidx.activity.result.PickVisualMediaRequest(
+        ActivityResultContracts.PickVisualMedia.VideoOnly
+    )
+
+    var savedToGallery by remember { mutableStateOf(false) }
+
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { dest: Uri? ->
@@ -112,9 +120,18 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         }
     }
 
+    /** Save = publish into the Gallery; document picker is the fallback. */
+    fun saveExport(file: File) {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { saveToGallery(context, file) }
+            if (ok) savedToGallery = true else saveLauncher.launch(file.name)
+        }
+    }
+
     fun startJob() {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
+        savedToGallery = false
         job = AudioJob.Preparing
         scope.launch {
             try {
@@ -173,7 +190,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { picker.launch(arrayOf("video/*")) },
+                onClick = { picker.launch(videoPickerRequest) },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(stringResource(R.string.import_video)) }
             return@Column
@@ -193,7 +210,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                 )
             }
         }
-        TextButton(onClick = { picker.launch(arrayOf("video/*")) }) {
+        TextButton(onClick = { picker.launch(videoPickerRequest) }) {
             Text(stringResource(R.string.m2_change_video))
         }
         Spacer(Modifier.height(8.dp))
@@ -280,9 +297,16 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         ComparePlayer(file = if (previewProcessed) j.file else j.input)
                         Spacer(Modifier.height(10.dp))
                         Button(
-                            onClick = { saveLauncher.launch(j.file.name) },
+                            onClick = { saveExport(j.file) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text(stringResource(R.string.m2_save)) }
+                        if (savedToGallery) {
+                            Text(
+                                stringResource(R.string.m2_saved_gallery),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -299,7 +323,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(20.dp))
-        TextButton(onClick = { picker.launch(arrayOf("video/*")) }) {
+        TextButton(onClick = { picker.launch(videoPickerRequest) }) {
             Text(stringResource(R.string.m2_change_video))
         }
     }

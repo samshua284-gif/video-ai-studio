@@ -63,7 +63,8 @@
     <string name="m2_result_duration">Output duration</string>
     <string name="m2_result_tracks">Tracks</string>
     <string name="m2_result_path">Saved inside the app at</string>
-    <string name="m2_save">Save to device…</string>
+    <string name="m2_save">Save to Gallery</string>
+    <string name="m2_saved_gallery">Saved to the Gallery ✓</string>
     <string name="m2_saved">Saved.</string>
     <string name="m2_range_error">Check the range: end must be after start and within the duration.</string>
     <string name="m2_change_video">Import another video</string>

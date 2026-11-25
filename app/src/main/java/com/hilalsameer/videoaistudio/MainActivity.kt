@@ -138,7 +138,9 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
     var inspecting by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    // Gallery (photo) picker restricted to videos — the owner asked
+    // for the Studio gallery, not the file manager (2026-11-25).
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -183,7 +185,13 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
         )
         Spacer(Modifier.height(20.dp))
         Button(
-            onClick = { picker.launch(arrayOf("video/*")) },
+            onClick = {
+                picker.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        ActivityResultContracts.PickVisualMedia.VideoOnly
+                    )
+                )
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(stringResource(R.string.import_video))
