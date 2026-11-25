@@ -486,17 +486,50 @@ private fun materializeGtcrn(context: android.content.Context): File {
 @Composable
 private fun ComparePlayer(file: File) {
     val context = LocalContext.current
+    // 0.4.2: the owner reported the preview shows a frame but the
+    // PlayerView controller's play button never starts playback
+    // (both Original and Processed). The compare player therefore
+    // carries its own explicit Play/Pause button OUTSIDE the
+    // AndroidView — a Compose button always receives its click —
+    // and any PlaybackException is printed under the player, so a
+    // failure names itself on screen instead of staying invisible.
+    var errorText by remember(file.absolutePath) { mutableStateOf<String?>(null) }
+    var playing by remember(file.absolutePath) { mutableStateOf(false) }
     val player = remember(file.absolutePath) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
             prepare()
         }
     }
-    DisposableEffect(player) { onDispose { player.release() } }
-    AndroidView(
-        factory = { ctx -> PlayerView(ctx).apply { this.player = player } },
-        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-    )
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                errorText = error.errorCodeName + ": " + (error.message ?: "")
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener); player.release() }
+    }
+    Column {
+        AndroidView(
+            factory = { ctx -> PlayerView(ctx).apply { this.player = player } },
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+        )
+        Row(modifier = Modifier.padding(top = 6.dp)) {
+            Button(onClick = { if (playing) player.pause() else player.play() }) {
+                Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
+            }
+        }
+        if (errorText != null) {
+            Text(
+                errorText!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
 }
 
 @Composable

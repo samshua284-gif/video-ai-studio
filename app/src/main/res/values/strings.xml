@@ -91,6 +91,8 @@
     <string name="m3_engine_note">This screen runs one engine: GTCRN (2024) on-device via ONNX — a speech-enhancement network that removes noise while keeping articulation clear. Compare before/after below and judge by ear.</string>
     <string name="m3_enhance_note">Cuts rumble below 60 Hz, lifts speech presence at 3 kHz, and normalizes loudness to -16 LUFS. The picture is copied untouched.</string>
     <string name="m3_compare">Compare before / after</string>
+    <string name="m3_play">Play</string>
+    <string name="m3_pause">Pause</string>
     <string name="m3_before">Original</string>
     <string name="m3_after">Processed</string>
 </resources>
