@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- play triangle, brand orange-red -->
+    <path
+        android:fillColor="#FF4A2D"
+        android:pathData="M42,34 L78,54 L42,74 Z" />
+    <!-- timeline bar -->
+    <path
+        android:fillColor="#FF8A3D"
+        android:pathData="M30,84 h48 v5 h-48 Z" />
+    <!-- playhead dot on the timeline -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,80.5 a6,6 0 1,0 0.1,0 Z" />
+</vector>

@@ -10,11 +10,15 @@ reported verification.
 
 - **Milestone 0 — Repository audit:** done. See
   [MILESTONE-0-AUDIT.md](MILESTONE-0-AUDIT.md).
-- **Milestone 1 — Foundation:** project structure, navigation, premium
-  dark UI, Arabic/English localization with RTL, video import through
-  the Storage Access Framework, Media3 preview, and real metadata
-  inspection (duration, resolution, codecs, audio/subtitle tracks)
-  via `MediaMetadataRetriever` + `MediaExtractor`.
+- **Milestone 1 — Foundation: COMPLETE.** Project structure,
+  navigation, premium dark UI, Arabic/English localization with RTL,
+  video import through the Storage Access Framework, Media3 preview,
+  and real metadata inspection (duration, resolution, codecs,
+  audio/subtitle tracks) via `MediaMetadataRetriever` +
+  `MediaExtractor`. CI-verified and field-verified on a real device —
+  see [MILESTONE-1-REPORT.md](MILESTONE-1-REPORT.md).
+- **Milestone 2 — Media engine: in progress** (audio extraction,
+  MP3/WAV export, trimming, compression, export validation).
 
 Later milestones (media engine, audio enhancement, speech recognition,
 translation, subtitles, video enhancement, batch/queue/history) are
