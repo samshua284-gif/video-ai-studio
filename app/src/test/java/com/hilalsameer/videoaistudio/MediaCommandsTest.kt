@@ -94,6 +94,14 @@ class MediaCommandsTest {
             "in.mp4", "out.mp4", "/data/files/std.rnnn", preroll = false
         ).joinToString(" ")
         assertTrue(!short.contains("asplit"))
+        // Soften-start fade rides at the very end of the audio chain.
+        val softened = MediaCommands.denoiseNeural(
+            "in.mp4", "out.mp4", "/data/files/std.rnnn", softenStart = true
+        ).joinToString(" ")
+        assertTrue(softened.contains("afade=t=in:st=0:d=0.8[aout]"))
+        val spectral = MediaCommands.denoise("in.mp4", "out.mp4", 1, softenStart = true)
+            .joinToString(" ")
+        assertTrue(spectral.contains("afade=t=in:st=0:d=0.8"))
     }
 
     @Test

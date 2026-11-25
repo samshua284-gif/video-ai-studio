@@ -76,6 +76,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     val engine = remember { MediaEngine() }
     var job by remember { mutableStateOf<AudioJob>(AudioJob.Idle) }
     var mode by remember { mutableStateOf(1) }
+    var softenStart by remember { mutableStateOf(true) }
     var previewProcessed by remember { mutableStateOf(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
@@ -154,10 +155,10 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     }
                     MediaCommands.denoiseNeural(
                         input.absolutePath, outFile.absolutePath, modelFile.absolutePath,
-                        preroll = info.durationMs >= 3000
+                        preroll = info.durationMs >= 3000, softenStart = softenStart
                     )
                 } else if (kind == AudioKind.NOISE) {
-                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode)
+                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart)
                 } else {
                     MediaCommands.enhanceAudio(input.absolutePath, outFile.absolutePath)
                 }
@@ -240,6 +241,16 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     RadioButton(selected = mode == i, onClick = { mode = i })
                     Text(stringResource(res), modifier = Modifier.padding(top = 12.dp))
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { softenStart = !softenStart }
+                    .padding(vertical = 4.dp)
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = softenStart,
+                    onCheckedChange = { softenStart = it }
+                )
+                Text(stringResource(R.string.m3_soften), modifier = Modifier.padding(top = 12.dp))
             }
             Text(
                 stringResource(R.string.m3_engine_note),

@@ -76,6 +76,7 @@
     <string name="m3_mode_balanced">متوازنة — تتبّع تكيّفي</string>
     <string name="m3_mode_strong">قوية — أقصى إزالة، قد تُخفت الكلام</string>
     <string name="m3_mode_neural">عصبية (RNNoise) — ذكاء مدرب على الكلام، أدقّ حجب</string>
+    <string name="m3_soften">تخفيف ضربة البداية (تصعيد لطيف 0.8 ثانية — يذيب خبطة بدء التسجيل)</string>
     <string name="m3_engine_note">الأوضاع الثلاثة الأولى معالجة طيفية حقيقية (FFT تكيّفي). الوضع العصبي يشغّل شبكة RNNoise على الجهاز — مدرّبة على فصل الكلام عن الضوضاء. قارن قبل/بعد أدناه واحكم بأذنك.</string>
     <string name="m3_enhance_note">يقطع الطنين تحت 60 Hz، ويرفع حضور الكلام عند 3 kHz، ويوحّد علوّ الصوت إلى -16 LUFS. الصورة تُنسخ دون مساس.</string>
     <string name="m3_compare">مقارنة قبل / بعد</string>

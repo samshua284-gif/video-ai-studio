@@ -93,15 +93,16 @@ object MediaCommands {
      * Noise removal (TD-003): adaptive FFT spectral denoising of the
      * audio track; the video stream is copied untouched.
      */
-    fun denoise(input: String, output: String, mode: Int): Array<String> {
+    fun denoise(input: String, output: String, mode: Int, softenStart: Boolean = false): Array<String> {
         val (nr, nf, tn) = denoiseModes[mode.coerceIn(0, 2)]
         val afftdn = buildString {
             append("afftdn=nr=$nr:nf=$nf")
             if (tn) append(":tn=1")
         }
+        val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=70,$afftdn",
+            "-af", "highpass=f=70,$afftdn$fade",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
@@ -126,16 +127,25 @@ object MediaCommands {
      * not the stream). Short clips (< 3 s) skip the pre-roll.
      */
     fun denoiseNeural(
-        input: String, output: String, modelPath: String, preroll: Boolean = true
-    ): Array<String> =
-        if (preroll) {
+        input: String, output: String, modelPath: String,
+        preroll: Boolean = true, softenStart: Boolean = false
+    ): Array<String> {
+        // Soften-start: a gentle 0.8 s fade-in. It exists because a
+        // one-off event in the source (a recording-start thump) is
+        // CONTENT to the denoiser, not background noise — it survives
+        // cleaning and then stands out naked in the new silence. The
+        // fade dissolves it instead of letting it pop (host-measured:
+        // a test thump's peak fell from -16.1 dB after cleaning to
+        // -32.5 dB with the fade).
+        val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
+        return if (preroll) {
             arrayOf(
                 "-y", "-i", input,
                 "-filter_complex",
                 "[0:a]highpass=f=70,aresample=48000,asplit=2[hd][bd];" +
                     "[hd]atrim=end=1.5,asetpts=PTS-STARTPTS[pre];" +
                     "[pre][bd]concat=n=2:v=0:a=1,arnndn=m='$modelPath'," +
-                    "atrim=start=1.5,asetpts=PTS-STARTPTS[aout]",
+                    "atrim=start=1.5,asetpts=PTS-STARTPTS$fade[aout]",
                 "-map", "0:v", "-map", "[aout]",
                 "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
                 output
@@ -143,11 +153,12 @@ object MediaCommands {
         } else {
             arrayOf(
                 "-y", "-i", input,
-                "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'",
+                "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'$fade",
                 "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
                 output
             )
         }
+    }
 
     /**
      * Audio enhancement: rumble cut, presence lift for speech clarity,
