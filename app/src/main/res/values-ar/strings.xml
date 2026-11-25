@@ -88,7 +88,7 @@
     <string name="m3_blend_full">نظافة كاملة</string>
     <string name="m3_blend_balanced">متوازن</string>
     <string name="m3_blend_clear">وضوح أعلى</string>
-    <string name="m3_engine_note">الأوضاع الثلاثة الأولى معالجة طيفية حقيقية (FFT تكيّفي). الوضع العصبي يشغّل شبكة GTCRN (2024) على الجهاز عبر ONNX — شبكة تحسين كلام تزيل الضوضاء مع الحفاظ على وضوح مخارج الحروف. قارن قبل/بعد أدناه واحكم بأذنك.</string>
+    <string name="m3_engine_note">هذه الشاشة تعمل بمحرك واحد: شبكة GTCRN (2024) على الجهاز عبر ONNX — شبكة تحسين كلام تزيل الضوضاء مع الحفاظ على وضوح مخارج الحروف. قارن قبل/بعد أدناه واحكم بأذنك.</string>
     <string name="m3_enhance_note">يقطع الطنين تحت 60 Hz، ويرفع حضور الكلام عند 3 kHz، ويوحّد علوّ الصوت إلى -16 LUFS. الصورة تُنسخ دون مساس.</string>
     <string name="m3_compare">مقارنة قبل / بعد</string>
     <string name="m3_before">الأصل</string>

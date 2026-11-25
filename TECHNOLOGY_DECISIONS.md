@@ -197,3 +197,14 @@ articulation-critical path). The `denoiseNeural` command builder
 is retained but no longer referenced by the UI; its removal is
 deferred to the final audit (Command 7) to keep this change
 minimal and reviewable.
+
+**Addendum (0.4.1, owner's order after field PASS).** The owner
+field-tested the GTCRN mode on 0.4.0 and judged it good ("الوضع
+الباقي جيد الان"), then ordered the three spectral modes deleted
+from the Noise screen. The screen now offers the GTCRN engine
+alone, with the soften-start fade and start mute retained (both
+ride the remux chain). The spectral `denoise` command builder and
+its tests remain in the codebase, unreferenced by the UI, pending
+the final audit (Command 7) — the same disposition as
+`denoiseNeural`. The clarity blend went with the spectral modes:
+it existed only to compensate their (and RNNoise's) smearing.

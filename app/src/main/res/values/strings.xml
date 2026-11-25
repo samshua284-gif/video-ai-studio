@@ -88,7 +88,7 @@
     <string name="m3_blend_full">Full clean</string>
     <string name="m3_blend_balanced">Balanced</string>
     <string name="m3_blend_clear">More clarity</string>
-    <string name="m3_engine_note">The first three modes are real spectral processing (adaptive FFT). Neural mode runs GTCRN (2024) on-device via ONNX — a speech-enhancement network that removes noise while keeping articulation clear. Compare before/after below and judge by ear.</string>
+    <string name="m3_engine_note">This screen runs one engine: GTCRN (2024) on-device via ONNX — a speech-enhancement network that removes noise while keeping articulation clear. Compare before/after below and judge by ear.</string>
     <string name="m3_enhance_note">Cuts rumble below 60 Hz, lifts speech presence at 3 kHz, and normalizes loudness to -16 LUFS. The picture is copied untouched.</string>
     <string name="m3_compare">Compare before / after</string>
     <string name="m3_before">Original</string>

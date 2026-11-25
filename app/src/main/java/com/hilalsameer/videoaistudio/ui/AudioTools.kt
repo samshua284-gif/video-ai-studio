@@ -24,7 +24,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,11 +78,9 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val engine = remember { MediaEngine() }
     var job by remember { mutableStateOf<AudioJob>(AudioJob.Idle) }
-    var mode by remember { mutableStateOf(1) }
     var softenStart by remember { mutableStateOf(true) }
     var preClean by remember { mutableStateOf(true) }
     var muteStart by remember { mutableStateOf(1.0f) }
-    var clarityWet by remember { mutableStateOf(0.7f) }
     var previewProcessed by remember { mutableStateOf(false) }
     val gtcrnCancel = remember { AtomicBoolean(false) }
 
@@ -165,7 +162,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     }
                     mf
                 } else null
-                if (kind == AudioKind.NOISE && mode == 3) {
+                if (kind == AudioKind.NOISE) {
                     // GTCRN engine (TD-004): extract a 16 kHz WAV,
                     // enhance it on-device via ONNX Runtime, then
                     // remux the enhanced audio with the untouched
@@ -223,14 +220,13 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     }
                     return@launch
                 }
-                val args = if (kind == AudioKind.NOISE) {
-                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart, muteStart, clarityWet)
-                } else {
-                    MediaCommands.enhanceAudio(
-                        input.absolutePath, outFile.absolutePath,
-                        modelFile?.absolutePath, preClean, softenStart
-                    )
-                }
+                // NOISE always returns above via the GTCRN flow
+                // (the spectral modes were removed at the owner's
+                // order, 0.4.1 — the neural mode earned the screen).
+                val args = MediaCommands.enhanceAudio(
+                    input.absolutePath, outFile.absolutePath,
+                    modelFile?.absolutePath, preClean, softenStart
+                )
                 job = AudioJob.Running(0f)
                 val result = engine.run(args) { processedMs ->
                     val frac = if (info.durationMs > 0) {
@@ -299,18 +295,16 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         Spacer(Modifier.height(8.dp))
 
         if (kind == AudioKind.NOISE) {
-            Text(stringResource(R.string.m3_mode), style = MaterialTheme.typography.titleSmall)
-            listOf(
-                R.string.m3_mode_light, R.string.m3_mode_balanced, R.string.m3_mode_strong,
-                R.string.m3_mode_neural
-            ).forEachIndexed { i, res ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().clickable { mode = i }.padding(vertical = 4.dp)
-                ) {
-                    RadioButton(selected = mode == i, onClick = { mode = i })
-                    Text(stringResource(res), modifier = Modifier.padding(top = 12.dp))
-                }
-            }
+            // 0.4.1 (owner's order): the spectral modes (Light /
+            // Balanced / Strong) are deleted — the GTCRN neural
+            // engine earned the screen outright ("الوضع الباقي جيد
+            // الان"). What remains: the engine note, soften-start,
+            // and the start mute.
+            Text(
+                stringResource(R.string.m3_mode_neural),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
             Row(
                 modifier = Modifier.fillMaxWidth().clickable { softenStart = !softenStart }
                     .padding(vertical = 4.dp)
@@ -336,32 +330,6 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         ) else ButtonDefaults.outlinedButtonColors()
                     ) { Text(if (sec == 0f) "0" else sec.toString()) }
-                }
-            }
-            // The clarity blend only applies to the spectral modes;
-            // GTCRN preserves articulation by design (TD-004), so
-            // the control is hidden in neural mode.
-            if (mode != 3) {
-                Text(
-                    stringResource(R.string.m3_blend),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Row(modifier = Modifier.padding(top = 4.dp)) {
-                    listOf(
-                        1.0f to R.string.m3_blend_full,
-                        0.7f to R.string.m3_blend_balanced,
-                        0.5f to R.string.m3_blend_clear
-                    ).forEach { (wetValue, labelRes) ->
-                        val selected = clarityWet == wetValue
-                        OutlinedButton(
-                            onClick = { clarityWet = wetValue },
-                            modifier = Modifier.padding(end = 6.dp),
-                            colors = if (selected) ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            ) else ButtonDefaults.outlinedButtonColors()
-                        ) { Text(stringResource(labelRes)) }
-                    }
                 }
             }
             Text(
