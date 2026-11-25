@@ -208,3 +208,23 @@ its tests remain in the codebase, unreferenced by the UI, pending
 the final audit (Command 7) — the same disposition as
 `denoiseNeural`. The clarity blend went with the spectral modes:
 it existed only to compensate their (and RNNoise's) smearing.
+
+## TD-005 — One shared before/after compare component (0.4.5)
+
+**Context.** The compare-player fixes of 0.4.2–0.4.4 (own
+Play/Pause button, restart after end, highlighted tabs,
+autoplay on tab switch, full-screen frame, on-screen error
+reporting) were earned on the Noise screen. The owner ordered
+them applied to EVERY tool that previews original vs processed
+— compression, extraction, noise, translation, and all future
+ones.
+
+**Decision.** The comparison lives in ONE file,
+`ui/ComparePlayer.kt`: `CompareTabs`, `ComparePlayer` (video),
+and `AudioComparePlayer` (audio-only outputs such as MP3/WAV
+extraction). AudioTools and MediaTools both call it; the M4–M7
+tools (transcription, translation, subtitles, enhancement)
+must use it too rather than growing their own preview. The
+export validator is likewise a single shared function
+(`media/ExportValidator.kt`), so its 0.4.2 probe fix already
+covered every tool.

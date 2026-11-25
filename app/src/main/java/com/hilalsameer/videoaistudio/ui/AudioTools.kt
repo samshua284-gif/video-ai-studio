@@ -1,7 +1,6 @@
 package com.hilalsameer.videoaistudio.ui
 
 import android.content.Intent
-import android.net.Uri
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,12 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.foundation.background
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,10 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.hilalsameer.videoaistudio.R
 import com.hilalsameer.videoaistudio.StudioState
 import com.hilalsameer.videoaistudio.data.formatDuration
@@ -420,22 +409,8 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         ARow(stringResource(R.string.m2_chk_sample), if (j.report.firstSampleReadable) "✓" else "✗")
                         Spacer(Modifier.height(10.dp))
                         Text(stringResource(R.string.m3_compare), style = MaterialTheme.typography.titleSmall)
-                        Row(modifier = Modifier.padding(top = 6.dp)) {
-                            OutlinedButton(
-                                onClick = { previewProcessed = false; comparePlaySignal++ },
-                                modifier = Modifier.weight(1f),
-                                colors = if (!previewProcessed) ButtonDefaults.outlinedButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                                ) else ButtonDefaults.outlinedButtonColors()
-                            ) { Text(stringResource(R.string.m3_before)) }
-                            Spacer(Modifier.padding(6.dp))
-                            OutlinedButton(
-                                onClick = { previewProcessed = true; comparePlaySignal++ },
-                                modifier = Modifier.weight(1f),
-                                colors = if (previewProcessed) ButtonDefaults.outlinedButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                                ) else ButtonDefaults.outlinedButtonColors()
-                            ) { Text(stringResource(R.string.m3_after)) }
+                        CompareTabs(previewProcessed) { sel ->
+                            previewProcessed = sel; comparePlaySignal++
                         }
                         Spacer(Modifier.height(8.dp))
                         ComparePlayer(
@@ -496,129 +471,6 @@ private fun materializeGtcrn(context: android.content.Context): File {
         f.writeBytes(Base64.decode(b64, Base64.DEFAULT))
     }
     return f
-}
-
-@Composable
-private fun ComparePlayer(file: File, playSignal: Int) {
-    val context = LocalContext.current
-    // 0.4.2: the owner reported the preview shows a frame but the
-    // PlayerView controller's play button never starts playback
-    // (both Original and Processed). The compare player therefore
-    // carries its own explicit Play/Pause button OUTSIDE the
-    // AndroidView — a Compose button always receives its click —
-    // and any PlaybackException is printed under the player, so a
-    // failure names itself on screen instead of staying invisible.
-    var errorText by remember(file.absolutePath) { mutableStateOf<String?>(null) }
-    var playing by remember(file.absolutePath) { mutableStateOf(false) }
-    var fullscreen by remember(file.absolutePath) { mutableStateOf(false) }
-    val player = remember(file.absolutePath) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
-            prepare()
-        }
-    }
-    DisposableEffect(player) {
-        val listener = object : androidx.media3.common.Player.Listener {
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                errorText = error.errorCodeName + ": " + (error.message ?: "")
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-        }
-        player.addListener(listener)
-        onDispose { player.removeListener(listener); player.release() }
-    }
-    // 0.4.3 (owner's field report on 0.4.2): three polish fixes.
-    // (a) PlayerView's own controller is disabled — its centre
-    //     play circle never answered taps inside this scrollable
-    //     Compose screen and stayed on screen as a dead promise;
-    //     our own button below is the only control now.
-    // (b) Tapping Original/Processed (playSignal changes) starts
-    //     that side playing immediately, so each side is heard on
-    //     its own — the comparison he asked for.
-    // (c) A finished video restarts: in STATE_ENDED, play() alone
-    //     does nothing ("plays only once"), so the button seeks
-    //     back to 0 first.
-    LaunchedEffect(playSignal) {
-        if (playSignal > 0) {
-            if (player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                player.seekTo(0)
-            }
-            player.play()
-        }
-    }
-    // 0.4.4 (owner's request): while playing, the video can open
-    // in an external full-screen frame — the inline box is small
-    // for a portrait phone video. The SAME player instance moves
-    // its surface into the dialog, so playback continues from the
-    // same position; closing the frame hands the surface back to
-    // the inline view (the update block re-attaches it).
-    if (fullscreen) {
-        Dialog(
-            onDismissRequest = { fullscreen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().background(Color.Black)
-                    .padding(12.dp)
-            ) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply { this.player = player; useController = false }
-                    },
-                    modifier = Modifier.fillMaxWidth().weight(1f)
-                )
-                Row(modifier = Modifier.padding(top = 8.dp)) {
-                    Button(onClick = {
-                        if (playing) player.pause() else {
-                            if (player.playbackState ==
-                                androidx.media3.common.Player.STATE_ENDED
-                            ) player.seekTo(0)
-                            player.play()
-                        }
-                    }) {
-                        Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
-                    }
-                    Spacer(Modifier.padding(6.dp))
-                    OutlinedButton(onClick = { fullscreen = false }) {
-                        Text(stringResource(R.string.m3_close))
-                    }
-                }
-            }
-        }
-    }
-    Column {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply { this.player = player; useController = false }
-            },
-            update = { view -> if (!fullscreen) view.player = player },
-            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-        )
-        Row(modifier = Modifier.padding(top = 6.dp)) {
-            Button(onClick = {
-                if (playing) player.pause() else {
-                    if (player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
-                        player.seekTo(0)
-                    }
-                    player.play()
-                }
-            }) {
-                Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
-            }
-            Spacer(Modifier.padding(6.dp))
-            OutlinedButton(onClick = { fullscreen = true }) {
-                Text(stringResource(R.string.m3_fullscreen))
-            }
-        }
-        if (errorText != null) {
-            Text(
-                errorText!!,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
-    }
 }
 
 @Composable

@@ -123,6 +123,11 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
     )
 
     var savedToGallery by remember { mutableStateOf(false) }
+    // Before/after comparison state (TD-005: the shared compare
+    // component serves every tool, this screen included).
+    var lastInput by remember { mutableStateOf<File?>(null) }
+    var previewProcessed by remember { mutableStateOf(true) }
+    var comparePlaySignal by remember { mutableStateOf(0) }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -170,6 +175,7 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                 val input = withContext(Dispatchers.IO) {
                     prepareInputFile(context, uri, info.name)
                 }
+                lastInput = input
                 val base = info.name.substringBeforeLast('.', info.name)
                 val outDir = exportsDir(context)
                 val (outFile, args) = when (kind) {
@@ -363,6 +369,30 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                         ResultRow(stringResource(R.string.m2_chk_tracks), if (j.report.trackCount > 0) "✓" else "✗")
                         ResultRow(stringResource(R.string.m2_chk_sample), if (j.report.firstSampleReadable) "✓" else "✗")
                         ResultRow(stringResource(R.string.m2_result_path), j.file.absolutePath)
+                        val inputFile = lastInput
+                        if (inputFile != null) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                stringResource(R.string.m3_compare),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            CompareTabs(previewProcessed) { sel ->
+                                previewProcessed = sel; comparePlaySignal++
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            if (kind == ToolKind.EXTRACT) {
+                                // Audio-only output: compare by ear.
+                                AudioComparePlayer(
+                                    file = if (previewProcessed) j.file else inputFile,
+                                    playSignal = comparePlaySignal
+                                )
+                            } else {
+                                ComparePlayer(
+                                    file = if (previewProcessed) j.file else inputFile,
+                                    playSignal = comparePlaySignal
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(10.dp))
                         Button(
                             onClick = { saveExport(j.file) },
