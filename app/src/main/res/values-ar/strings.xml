@@ -66,4 +66,5 @@
     <string name="m2_save">حفظ في الجهاز…</string>
     <string name="m2_saved">حُفظ.</string>
     <string name="m2_range_error">راجع النطاق: النهاية بعد البداية وداخل المدة.</string>
+    <string name="m2_change_video">استيراد فيديو آخر</string>
 </resources>

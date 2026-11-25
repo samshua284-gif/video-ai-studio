@@ -90,6 +90,16 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         ToolKind.COMPRESS -> R.string.m2_run_compress
     }
 
+    // Prefill the trim end with the source duration whenever a new
+    // input is loaded, so an untouched form never means "re-encode
+    // the whole file" by accident.
+    androidx.compose.runtime.LaunchedEffect(state.currentInfo?.name, kind) {
+        val inf = state.currentInfo
+        if (kind == ToolKind.TRIM && inf != null) {
+            endText = (inf.durationMs / 1000).toString()
+        }
+    }
+
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
@@ -232,7 +242,10 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = { picker.launch(arrayOf("video/*")) }) {
+            Text(stringResource(R.string.m2_change_video))
+        }
+        Spacer(Modifier.height(8.dp))
 
         when (kind) {
             ToolKind.EXTRACT -> {
