@@ -56,6 +56,14 @@ class MediaCommandsTest {
     }
 
     @Test
+    fun neuralDenoiseUsesBundledRnnoiseModel() {
+        val joined = MediaCommands.denoiseNeural("in.mp4", "out.mp4", "/data/files/std.rnnn")
+            .joinToString(" ")
+        assertTrue(joined.contains("arnndn=m='/data/files/std.rnnn'"))
+        assertTrue(joined.contains("aresample=48000"))
+    }
+
+    @Test
     fun enhanceChainNormalizesLoudness() {
         val joined = MediaCommands.enhanceAudio("in.mp4", "out.mp4").joinToString(" ")
         assertTrue(joined.contains("loudnorm=I=-16:TP=-1.5:LRA=11"))

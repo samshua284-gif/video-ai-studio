@@ -56,3 +56,15 @@ Every push also builds in GitHub Actions (see
 
 Milestone 1 requests no broad permissions: file access happens only
 through the system picker, per file, and originals are never modified.
+
+## Third-party components
+
+- **FFmpeg** via FFmpegKit `full-gpl` 6.0-2 (GPL; includes libx264
+  and libmp3lame) — media engine for extraction, trimming,
+  compression, and audio processing. This project is open source,
+  as the GPL requires.
+- **RNNoise** (Xiph.Org Foundation, BSD 3-Clause) — the original
+  RNNoise v0.1 model (`app/src/main/assets/std.rnnn`, with its
+  COPYING file alongside) powers the neural noise-removal mode
+  through FFmpeg's `arnndn` filter. Model provenance and hashes are
+  recorded in TECHNOLOGY_DECISIONS.md (TD-003).

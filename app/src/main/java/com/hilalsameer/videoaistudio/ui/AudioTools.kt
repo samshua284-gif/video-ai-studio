@@ -143,7 +143,19 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     exportsDir(context),
                     base + if (kind == AudioKind.NOISE) "_denoised.mp4" else "_enhanced.mp4"
                 )
-                val args = if (kind == AudioKind.NOISE) {
+                val args = if (kind == AudioKind.NOISE && mode == 3) {
+                    // Neural mode: materialize the bundled RNNoise
+                    // model (assets are not real files for FFmpeg).
+                    val modelFile = File(context.filesDir, "std.rnnn")
+                    if (!modelFile.exists() || modelFile.length() != 302903L) {
+                        context.assets.open("std.rnnn").use { inp ->
+                            modelFile.outputStream().use { out -> inp.copyTo(out) }
+                        }
+                    }
+                    MediaCommands.denoiseNeural(
+                        input.absolutePath, outFile.absolutePath, modelFile.absolutePath
+                    )
+                } else if (kind == AudioKind.NOISE) {
                     MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode)
                 } else {
                     MediaCommands.enhanceAudio(input.absolutePath, outFile.absolutePath)
@@ -218,7 +230,8 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         if (kind == AudioKind.NOISE) {
             Text(stringResource(R.string.m3_mode), style = MaterialTheme.typography.titleSmall)
             listOf(
-                R.string.m3_mode_light, R.string.m3_mode_balanced, R.string.m3_mode_strong
+                R.string.m3_mode_light, R.string.m3_mode_balanced, R.string.m3_mode_strong,
+                R.string.m3_mode_neural
             ).forEachIndexed { i, res ->
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { mode = i }.padding(vertical = 4.dp)

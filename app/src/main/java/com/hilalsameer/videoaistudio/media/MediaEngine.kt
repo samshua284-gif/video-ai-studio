@@ -89,6 +89,21 @@ object MediaCommands {
     }
 
     /**
+     * Neural noise removal (TD-003 amendment): RNNoise via arnndn with
+     * the original Xiph model (assets/std.rnnn, BSD-3). The network is
+     * trained to separate speech from noise, so it suppresses far more
+     * noise than spectral gating at the same speech cost. RNNoise runs
+     * at 48 kHz, hence the resample into it.
+     */
+    fun denoiseNeural(input: String, output: String, modelPath: String): Array<String> =
+        arrayOf(
+            "-y", "-i", input,
+            "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath',aresample=async=1:min_hard_comp=0.100",
+            "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+            output
+        )
+
+    /**
      * Audio enhancement: rumble cut, presence lift for speech clarity,
      * and loudness normalization to -16 LUFS. Video copied untouched.
      */

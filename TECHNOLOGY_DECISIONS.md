@@ -60,6 +60,23 @@ genuine DSP solution ships now and the neural upgrade stays an open,
 documented path — it must not be faked or bundled from a murky
 source.
 
+**Amendment (same day) — provenance secured, neural mode shipped:**
+the original Xiph RNNoise v0.1 model, serialized for arnndn as
+`std.rnnn`, was obtained from richardpl/arnndn-models at pinned
+commit `0fda24c46d78f0207d820bb970fbe85c1971b39c` and verified
+locally before bundling: size 302,903 bytes, SHA-256
+`6b8943dc4a9b6b24425873992a44f29c0577503276456af46a8854774faeb294`
+(matching the published provenance record), license = Xiph's BSD
+3-clause COPYING (SHA-256 `e2f59ff4…`, bundled alongside the model
+in assets). Independent projects have verified the serialized
+arrays equal Xiph's `rnn_data.c` exactly. Host measurement (same
+pink-noise testbed): neural suppression reached **−22.6 dB** of
+noise reduction versus the spectral Balanced mode's −5.0 dB;
+speech preservation is by design (the network is speech-trained)
+and is judged by the owner's ear in the field test. The neural mode
+ships as the fourth noise-removal mode in 0.3.3; the spectral modes
+remain for comparison and fallback.
+
 ## TD-001 — Media engine for Milestone 2 (2026-11-25)
 
 **Decision:** FFmpegKit `com.arthenica:ffmpeg-kit-full-gpl:6.0-2`
