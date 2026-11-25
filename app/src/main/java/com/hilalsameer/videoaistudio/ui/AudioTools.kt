@@ -1,5 +1,6 @@
 package com.hilalsameer.videoaistudio.ui
 
+import android.net.Uri
 import android.content.Intent
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
