@@ -12,8 +12,13 @@ android {
         applicationId = "com.hilalsameer.videoaistudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.2"
+        ndk {
+            // FFmpegKit ships four ABIs; his devices are ARM — keep the
+            // APK lean and skip x86/x86_64 (TD-001).
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -46,6 +51,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.ffmpeg.kit.full.gpl)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
 }

@@ -37,4 +37,33 @@
     <string name="meta_unknown">Unknown</string>
     <string name="meta_fps_value">%1$.2f fps</string>
     <string name="inspect_failed">Could not inspect this file. It may be unsupported or corrupted.</string>
+
+    <string name="m2_need_import">Import a video first — this tool works on the imported file.</string>
+    <string name="m2_input_file">Input</string>
+    <string name="m2_preparing">Preparing the file…</string>
+    <string name="m2_run_extract">Extract audio</string>
+    <string name="m2_run_trim">Trim video</string>
+    <string name="m2_run_compress">Compress video</string>
+    <string name="m2_format">Format</string>
+    <string name="m2_bitrate">Bitrate</string>
+    <string name="m2_trim_start">Start (seconds)</string>
+    <string name="m2_trim_end">End (seconds)</string>
+    <string name="m2_trim_hint">Frame-accurate cut (re-encodes). Source duration: %1$s</string>
+    <string name="m2_quality">Quality</string>
+    <string name="m2_quality_high">High (CRF 20, up to 1080p)</string>
+    <string name="m2_quality_balanced">Balanced (CRF 26, up to 720p)</string>
+    <string name="m2_quality_small">Small file (CRF 32, up to 480p)</string>
+    <string name="m2_running">Processing… %1$d%%</string>
+    <string name="m2_cancel">Cancel</string>
+    <string name="m2_cancelled">Cancelled.</string>
+    <string name="m2_failed">Processing failed. The engine log tail:</string>
+    <string name="m2_done">Done — export validated</string>
+    <string name="m2_invalid">The export did not pass validation.</string>
+    <string name="m2_result_size">Output size</string>
+    <string name="m2_result_duration">Output duration</string>
+    <string name="m2_result_tracks">Tracks</string>
+    <string name="m2_result_path">Saved inside the app at</string>
+    <string name="m2_save">Save to device…</string>
+    <string name="m2_saved">Saved.</string>
+    <string name="m2_range_error">Check the range: end must be after start and within the duration.</string>
 </resources>

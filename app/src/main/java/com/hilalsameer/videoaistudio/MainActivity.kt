@@ -54,6 +54,8 @@ import com.hilalsameer.videoaistudio.data.aspectRatio
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
+import com.hilalsameer.videoaistudio.ui.MediaToolScreen
+import com.hilalsameer.videoaistudio.ui.ToolKind
 import com.hilalsameer.videoaistudio.ui.VideoAIStudioTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -114,7 +116,14 @@ fun StudioApp() {
         }
         composable("tool/{idx}") { entry ->
             val idx = entry.arguments?.getString("idx")?.toIntOrNull() ?: 0
-            ToolStatusScreen(tool = TOOLS[idx], onBack = { nav.popBackStack() })
+            // Milestone 2 tools are real screens; the rest keep the
+            // honest milestone-status screen until their milestone lands.
+            when (idx) {
+                3 -> MediaToolScreen(ToolKind.EXTRACT, state, onBack = { nav.popBackStack() })
+                7 -> MediaToolScreen(ToolKind.COMPRESS, state, onBack = { nav.popBackStack() })
+                8 -> MediaToolScreen(ToolKind.TRIM, state, onBack = { nav.popBackStack() })
+                else -> ToolStatusScreen(tool = TOOLS[idx], onBack = { nav.popBackStack() })
+            }
         }
     }
 }

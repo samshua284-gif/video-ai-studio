@@ -37,4 +37,33 @@
     <string name="meta_unknown">غير معروف</string>
     <string name="meta_fps_value">%1$.2f إطار/ث</string>
     <string name="inspect_failed">تعذّر فحص هذا الملف. قد يكون غير مدعوم أو تالفًا.</string>
+
+    <string name="m2_need_import">استورد فيديو أولًا — تعمل هذه الأداة على الملف المستورد.</string>
+    <string name="m2_input_file">المدخل</string>
+    <string name="m2_preparing">تجهيز الملف…</string>
+    <string name="m2_run_extract">استخراج الصوت</string>
+    <string name="m2_run_trim">قصّ الفيديو</string>
+    <string name="m2_run_compress">ضغط الفيديو</string>
+    <string name="m2_format">الصيغة</string>
+    <string name="m2_bitrate">معدل البت</string>
+    <string name="m2_trim_start">البداية (ثوانٍ)</string>
+    <string name="m2_trim_end">النهاية (ثوانٍ)</string>
+    <string name="m2_trim_hint">قصّ دقيق على الإطار (إعادة ترميز). مدة المصدر: %1$s</string>
+    <string name="m2_quality">الجودة</string>
+    <string name="m2_quality_high">عالية (CRF 20، حتى 1080p)</string>
+    <string name="m2_quality_balanced">متوازنة (CRF 26، حتى 720p)</string>
+    <string name="m2_quality_small">حجم صغير (CRF 32، حتى 480p)</string>
+    <string name="m2_running">جارٍ المعالجة… %1$d%%</string>
+    <string name="m2_cancel">إلغاء</string>
+    <string name="m2_cancelled">أُلغيت.</string>
+    <string name="m2_failed">فشلت المعالجة. ذيل سجل المحرك:</string>
+    <string name="m2_done">تم — والتصدير مُتحقق منه</string>
+    <string name="m2_invalid">لم يجتز التصدير التحقق.</string>
+    <string name="m2_result_size">حجم الناتج</string>
+    <string name="m2_result_duration">مدة الناتج</string>
+    <string name="m2_result_tracks">المسارات</string>
+    <string name="m2_result_path">محفوظ داخل التطبيق في</string>
+    <string name="m2_save">حفظ في الجهاز…</string>
+    <string name="m2_saved">حُفظ.</string>
+    <string name="m2_range_error">راجع النطاق: النهاية بعد البداية وداخل المدة.</string>
 </resources>
