@@ -164,17 +164,29 @@ object MediaCommands {
      * Audio enhancement: rumble cut, presence lift for speech clarity,
      * and loudness normalization to -16 LUFS. Video copied untouched.
      */
-    fun enhanceAudio(input: String, output: String): Array<String> =
-        arrayOf(
+    fun enhanceAudio(
+        input: String, output: String,
+        modelPath: String? = null, preClean: Boolean = false
+    ): Array<String> {
+        // loudnorm stays LAST: an aresample appended after it in
+        // 0.3.1 could not negotiate a channel layout with the
+        // encoder on FFmpeg 6.0 and failed the whole conversion
+        // (owner's device log, 2026-11-25).
+        // preClean runs RNNoise BEFORE the polish: enhancement lifts
+        // everything, noise included, so a noisy source comes out
+        // with polished noise ("تشويش" — owner's field report).
+        // Host measurement (quiet-gap noise RMS): source -25.2 dB,
+        // plain chain -25.1 dB, pre-cleaned chain -85.2 dB. A noise
+        // gate in the chain measured NO improvement and was dropped.
+        val clean = if (preClean && modelPath != null)
+            "aresample=48000,arnndn=m='$modelPath'," else ""
+        return arrayOf(
             "-y", "-i", input,
-            // loudnorm stays LAST: an aresample appended after it in
-            // 0.3.1 could not negotiate a channel layout with the
-            // encoder on FFmpeg 6.0 and failed the whole conversion
-            // (owner's device log, 2026-11-25).
-            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-af", "highpass=f=60,${clean}equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
+    }
 
     private val errorNeedles = listOf(
         "error", "no such", "invalid", "failed", "cannot", "out of range",

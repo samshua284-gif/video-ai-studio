@@ -61,6 +61,19 @@ class MediaCommandsTest {
     }
 
     @Test
+    fun enhancePreCleanInsertsRnnoiseBeforePolish() {
+        val plain = MediaCommands.enhanceAudio("in.mp4", "out.mp4").joinToString(" ")
+        assertTrue(!plain.contains("arnndn"))
+        assertTrue(plain.contains("loudnorm"))
+        val cleaned = MediaCommands.enhanceAudio(
+            "in.mp4", "out.mp4", "/data/files/std.rnnn", preClean = true
+        ).joinToString(" ")
+        assertTrue(cleaned.contains("arnndn=m='/data/files/std.rnnn'"))
+        // RNNoise must run BEFORE the equalizer/loudnorm polish.
+        assertTrue(cleaned.indexOf("arnndn") < cleaned.indexOf("loudnorm"))
+    }
+
+    @Test
     fun errorExcerptFindsTheCause() {
         val log = "ffmpeg version 6.0\nInput #0, mov, from 'x':\n" +
             "Stream mapping:\n  Stream #0:0 -> #0:0\n" +

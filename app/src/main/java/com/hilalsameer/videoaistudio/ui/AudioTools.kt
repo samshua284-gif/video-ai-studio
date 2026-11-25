@@ -77,6 +77,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     var job by remember { mutableStateOf<AudioJob>(AudioJob.Idle) }
     var mode by remember { mutableStateOf(1) }
     var softenStart by remember { mutableStateOf(true) }
+    var preClean by remember { mutableStateOf(true) }
     var previewProcessed by remember { mutableStateOf(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
@@ -144,23 +145,32 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     exportsDir(context),
                     base + if (kind == AudioKind.NOISE) "_denoised.mp4" else "_enhanced.mp4"
                 )
-                val args = if (kind == AudioKind.NOISE && mode == 3) {
-                    // Neural mode: materialize the bundled RNNoise
-                    // model (assets are not real files for FFmpeg).
-                    val modelFile = File(context.filesDir, "std.rnnn")
-                    if (!modelFile.exists() || modelFile.length() != 302903L) {
+                // The RNNoise model is needed by the neural denoise
+                // mode and by enhance-with-pre-clean; materialize it
+                // once (assets are not real files for FFmpeg).
+                val needsModel = (kind == AudioKind.NOISE && mode == 3) ||
+                    (kind == AudioKind.ENHANCE && preClean)
+                val modelFile = if (needsModel) {
+                    val mf = File(context.filesDir, "std.rnnn")
+                    if (!mf.exists() || mf.length() != 302903L) {
                         context.assets.open("std.rnnn").use { inp ->
-                            modelFile.outputStream().use { out -> inp.copyTo(out) }
+                            mf.outputStream().use { out -> inp.copyTo(out) }
                         }
                     }
+                    mf
+                } else null
+                val args = if (kind == AudioKind.NOISE && mode == 3) {
                     MediaCommands.denoiseNeural(
-                        input.absolutePath, outFile.absolutePath, modelFile.absolutePath,
+                        input.absolutePath, outFile.absolutePath, modelFile!!.absolutePath,
                         preroll = info.durationMs >= 3000, softenStart = softenStart
                     )
                 } else if (kind == AudioKind.NOISE) {
                     MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart)
                 } else {
-                    MediaCommands.enhanceAudio(input.absolutePath, outFile.absolutePath)
+                    MediaCommands.enhanceAudio(
+                        input.absolutePath, outFile.absolutePath,
+                        modelFile?.absolutePath, preClean
+                    )
                 }
                 job = AudioJob.Running(0f)
                 val result = engine.run(args) { processedMs ->
@@ -259,6 +269,16 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 6.dp)
             )
         } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { preClean = !preClean }
+                    .padding(vertical = 4.dp)
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = preClean,
+                    onCheckedChange = { preClean = it }
+                )
+                Text(stringResource(R.string.m3_preclean), modifier = Modifier.padding(top = 12.dp))
+            }
             Text(
                 stringResource(R.string.m3_enhance_note),
                 style = MaterialTheme.typography.bodySmall,
