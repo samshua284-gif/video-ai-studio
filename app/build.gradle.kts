@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.hilalsameer.videoaistudio"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.hilalsameer.videoaistudio"
