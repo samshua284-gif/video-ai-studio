@@ -156,6 +156,34 @@ class MediaCommandsTest {
     }
 
     @Test
+    fun extractWav16kShape() {
+        val args = MediaCommands.extractWav16k("in.mp4", "in.wav")
+        val joined = args.joinToString(" ")
+        assertTrue(joined.contains("-vn"))
+        assertTrue(joined.contains("-ar 16000"))
+        assertTrue(joined.contains("-ac 1"))
+        assertTrue(joined.contains("pcm_s16le"))
+        assertEquals("in.wav", args.last())
+    }
+
+    @Test
+    fun remuxEnhancedShape() {
+        val args = MediaCommands.remuxEnhanced("in.mp4", "enh.wav", "out.mp4", true, 1.0f)
+        val joined = args.joinToString(" ")
+        assertTrue(joined.contains("-map 0:v"))
+        assertTrue(joined.contains("-map 1:a"))
+        assertTrue(joined.contains("-codec:v copy"))
+        assertTrue(joined.contains("highpass=f=70"))
+        assertTrue(joined.contains("afade=t=in:st=0:d=0.8"))
+        // the start mute rides after the fade, at the very end of the chain
+        assertTrue(joined.contains("eval=frame"))
+        val plain = MediaCommands.remuxEnhanced("in.mp4", "enh.wav", "out.mp4", false, 0f)
+            .joinToString(" ")
+        assertTrue(!plain.contains("afade"))
+        assertTrue(!plain.contains("eval=frame"))
+    }
+
+    @Test
     fun trimRangeValidation() {
         assertNull(MediaCommands.trimRangeError(0.0, 10.0, 60.0))
         assertEquals("start_negative", MediaCommands.trimRangeError(-1.0, 10.0, 60.0))

@@ -12,8 +12,8 @@ android {
         applicationId = "com.hilalsameer.videoaistudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "0.3.14"
+        versionCode = 20
+        versionName = "0.4.0"
         ndk {
             // FFmpegKit ships four ABIs; his devices are ARM — keep the
             // APK lean and skip x86/x86_64 (TD-001).
@@ -36,6 +36,15 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        jniLibs {
+            // FFmpegKit and ONNX Runtime both bundle libc++_shared.so.
+            pickFirsts += listOf(
+                "lib/arm64-v8a/libc++_shared.so",
+                "lib/armeabi-v7a/libc++_shared.so"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -52,6 +61,7 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
     implementation(libs.ffmpeg.kit.full.gpl)
+    implementation(libs.onnxruntime.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation("junit:junit:4.13.2")
 }

@@ -117,3 +117,83 @@ carries the attribution.
 coverage for lame/x264 across ABIs), bundling a raw ffmpeg binary
 (process/ABI management burden, no maintained source), pure-Java MP3
 encoders (unproven quality/performance for feature-length audio).
+
+---
+
+## TD-004 — Neural denoise engine: RNNoise (2017) replaced by GTCRN (2024) via ONNX Runtime
+
+**Context.** The M3 neural mode shipped RNNoise v0.1 through FFmpeg's
+`arnndn` (TD-003). The owner's field verdicts were consistent: noise
+suppression itself was "excellent", but speech articulation came out
+smeared ("مخارج الكلام مشوشة") across whole utterances. A dry/wet
+clarity blend built to compensate was field-rejected (0.3.14): by
+construction it re-admits the original noise through the dry path.
+The defect is the 2017 model's ceiling, not tuning. Per the owner's
+standing rule (2026-11-25), the replacement had to be measured to
+proven success on the build host before delivery.
+
+**Measurement (build host, before any integration).** Real speech
+(Piper TTS, consonant-rich sentences) mixed with shaped noise at
+8 dB SNR; log-spectral distance (LSD) to the clean reference over
+speech-active frames (lower = closer to clean speech), plus the
+noise-only tail level after processing:
+
+| Engine | LSD to clean | Noise tail |
+|---|---|---|
+| Noisy input | 20.30 dB | -23.7 dB |
+| RNNoise v0.1 (incumbent) | 13.11 dB | -28.2 dB |
+| GTCRN (reference runtime) | 11.50 dB | -61.0 dB |
+| GTCRN (this app's own STFT port) | 11.46 dB | -55.5 dB |
+
+An earlier sine-tone articulation proxy was discarded as invalid
+for learned models (a lone 2.7 kHz sine is not speech to them);
+the real-speech test above is the governing evidence.
+
+**Decision.** The neural denoise mode runs **GTCRN**
+(`gtcrn_simple.onnx`, 535,638 bytes, SHA-256
+e77603ac0c23dac3227dd2d7135b3a585cbee2679048aecfa886657d3ae1b534,
+from the sherpa-onnx project's official model release) through
+**ONNX Runtime Android 1.24.3** (`com.microsoft.onnxruntime:
+onnxruntime-android`, resolved via the GCS mirror like everything
+else). The reference runtime (sherpa-onnx) is **not** published on
+Maven Central (verified 404 on both Central hosts), so it serves
+as the verification oracle only; the app integrates the model
+directly: `media/GtcrnEngine.kt` (streaming per-frame inference
+with the model's three cache tensors; 30 s cores with 1 s context)
++ `media/Dsp.kt` (STFT/iSTFT) + `media/WaveIo.kt` (PCM16 WAV I/O).
+Pipeline: FFmpeg extracts 16 kHz mono WAV → GTCRN → FFmpeg remuxes
+the enhanced audio with the untouched video stream.
+
+**STFT convention** (matched numerically against the reference
+before porting): 512-point periodic Hann, hop 256, zero center-pad
+256 both sides, overlap-add with window-square normalization. The
+Kotlin port reproduces the golden STFT frame to 1.0e-5 max abs
+difference and reconstructs identity to 3.4e-6 (JVM harness);
+CI additionally runs an STFT/iSTFT identity unit test.
+
+**Asset channel.** The .onnx is binary and this project's source
+channel carries text only, so the model ships as
+`assets/gtcrn.onnx.b64` and is decoded once into internal storage
+with an exact-size check (the same pattern class as std.rnnn's
+materialization). The base64 round-trip was hash-verified.
+
+**Disclosed limitations.**
+- The neural path is 16 kHz mono: content above 8 kHz is not
+  preserved in neural mode. That is the speech band; the spectral
+  modes remain full-band for music/general audio.
+- This port's noise tail measured -55.5 dB vs the reference
+  runtime's -61.0 dB on the artificial test (low-band residue);
+  speech quality (LSD) is at parity. The remux chain's 70 Hz
+  high-pass covers part of that band in practice.
+- The APK grows by ONNX Runtime's native libraries (~tens of MB
+  across the two shipped ABIs); `libc++_shared.so` collisions with
+  FFmpegKit are resolved by packaging pickFirsts.
+- Final device verdict (owner's ear, owner's material) remains the
+  last gate, as with every milestone — no emulator exists here.
+
+**RNNoise's remaining role.** `arnndn` still powers the Enhance
+screen's pre-clean (measured -85.2 dB gap noise there; not the
+articulation-critical path). The `denoiseNeural` command builder
+is retained but no longer referenced by the UI; its removal is
+deferred to the final audit (Command 7) to keep this change
+minimal and reviewable.

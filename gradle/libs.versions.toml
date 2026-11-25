@@ -8,6 +8,7 @@ navigationCompose = "2.8.5"
 composeBom = "2024.12.01"
 media3 = "1.5.1"
 ffmpegKit = "6.0-2"
+onnxruntime = "1.24.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -24,6 +25,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 ffmpeg-kit-full-gpl = { group = "com.arthenica", name = "ffmpeg-kit-full-gpl", version.ref = "ffmpegKit" }
+onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

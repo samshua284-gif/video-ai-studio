@@ -281,6 +281,37 @@ object MediaCommands {
         )
     }
 
+    /** Extract the audio track as 16 kHz mono WAV — the GTCRN engine's input (TD-004). */
+    fun extractWav16k(input: String, wavOut: String): Array<String> = arrayOf(
+        "-y", "-i", input,
+        "-vn", "-ar", "16000", "-ac", "1", "-codec:a", "pcm_s16le",
+        wavOut
+    )
+
+    /**
+     * Remux: the original video stream (copied untouched) plus the
+     * GTCRN-enhanced WAV as AAC. highpass first (the reference
+     * runtime's low-band residue sits there), then the owner's
+     * soften-start fade and start mute ride on the enhanced audio.
+     */
+    fun remuxEnhanced(
+        videoIn: String, wavIn: String, output: String,
+        softenStart: Boolean = true, muteStartSec: Float = 0f
+    ): Array<String> {
+        val tail = buildString {
+            if (softenStart) append(",afade=t=in:st=0:d=0.8")
+            if (muteStartSec > 0f) append(",").append(muteStartFilter(muteStartSec))
+        }
+        return arrayOf(
+            "-y", "-i", videoIn, "-i", wavIn,
+            "-map", "0:v", "-map", "1:a",
+            "-af", "highpass=f=70$tail",
+            "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+            "-shortest",
+            output
+        )
+    }
+
     private val errorNeedles = listOf(
         "error", "no such", "invalid", "failed", "cannot", "out of range",
         "not found", "denied", "unsupported"

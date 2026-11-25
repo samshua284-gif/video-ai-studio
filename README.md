@@ -21,7 +21,12 @@ reported verification.
   extraction (MP3/WAV), frame-accurate trimming and compression,
   every export validated in-app. CI-verified and field-verified —
   see [MILESTONE-2-REPORT.md](MILESTONE-2-REPORT.md).
-- **Milestone 3 — Audio enhancement & noise removal: in progress.**
+- **Milestone 3 — Audio enhancement & noise removal: COMPLETE
+  (0.4.0).** Spectral denoise (3 modes) + GTCRN neural denoise,
+  loudness-normalizing enhancement with neural pre-clean, residue
+  gate and start-artifact controls, before/after compare player,
+  every export validated in-app — see
+  [MILESTONE-3-REPORT.md](MILESTONE-3-REPORT.md) and TD-003/TD-004.
 
 Later milestones (media engine, audio enhancement, speech recognition,
 translation, subtitles, video enhancement, batch/queue/history) are
@@ -65,6 +70,13 @@ through the system picker, per file, and originals are never modified.
   as the GPL requires.
 - **RNNoise** (Xiph.Org Foundation, BSD 3-Clause) — the original
   RNNoise v0.1 model (`app/src/main/assets/std.rnnn`, with its
-  COPYING file alongside) powers the neural noise-removal mode
-  through FFmpeg's `arnndn` filter. Model provenance and hashes are
-  recorded in TECHNOLOGY_DECISIONS.md (TD-003).
+  COPYING file alongside) powers the Enhance screen's neural
+  pre-clean through FFmpeg's `arnndn` filter. Model provenance and
+  hashes are recorded in TECHNOLOGY_DECISIONS.md (TD-003).
+- **GTCRN** (Hao et al., ICASSP 2024; model via the sherpa-onnx
+  project's official release) — the neural noise-removal engine
+  since 0.4.0, run on-device through ONNX Runtime. Ships as
+  `app/src/main/assets/gtcrn.onnx.b64`; provenance, hash and the
+  head-to-head measurements against RNNoise are in TD-004.
+- **ONNX Runtime** (Microsoft, MIT) — `onnxruntime-android` 1.24.3,
+  the inference runtime for the GTCRN engine.

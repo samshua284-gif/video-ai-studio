@@ -2,6 +2,7 @@ package com.hilalsameer.videoaistudio.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -47,6 +48,7 @@ import com.hilalsameer.videoaistudio.StudioState
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
+import com.hilalsameer.videoaistudio.media.GtcrnEngine
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
 import com.hilalsameer.videoaistudio.media.ValidationReport
@@ -58,6 +60,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 enum class AudioKind { NOISE, ENHANCE }
 
@@ -82,6 +85,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     var muteStart by remember { mutableStateOf(1.0f) }
     var clarityWet by remember { mutableStateOf(0.7f) }
     var previewProcessed by remember { mutableStateOf(false) }
+    val gtcrnCancel = remember { AtomicBoolean(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
     val runRes = if (kind == AudioKind.NOISE) R.string.m3_run_noise else R.string.m3_run_enhance
@@ -148,11 +152,10 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     exportsDir(context),
                     base + if (kind == AudioKind.NOISE) "_denoised.mp4" else "_enhanced.mp4"
                 )
-                // The RNNoise model is needed by the neural denoise
-                // mode and by enhance-with-pre-clean; materialize it
-                // once (assets are not real files for FFmpeg).
-                val needsModel = (kind == AudioKind.NOISE && mode == 3) ||
-                    (kind == AudioKind.ENHANCE && preClean)
+                // The RNNoise model is still used by enhance-with-
+                // pre-clean; materialize it once (assets are not
+                // real files for FFmpeg).
+                val needsModel = kind == AudioKind.ENHANCE && preClean
                 val modelFile = if (needsModel) {
                     val mf = File(context.filesDir, "std.rnnn")
                     if (!mf.exists() || mf.length() != 302903L) {
@@ -162,13 +165,65 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     }
                     mf
                 } else null
-                val args = if (kind == AudioKind.NOISE && mode == 3) {
-                    MediaCommands.denoiseNeural(
-                        input.absolutePath, outFile.absolutePath, modelFile!!.absolutePath,
-                        preroll = info.durationMs >= 3000, softenStart = softenStart,
-                        muteStartSec = muteStart, wet = clarityWet
-                    )
-                } else if (kind == AudioKind.NOISE) {
+                if (kind == AudioKind.NOISE && mode == 3) {
+                    // GTCRN engine (TD-004): extract a 16 kHz WAV,
+                    // enhance it on-device via ONNX Runtime, then
+                    // remux the enhanced audio with the untouched
+                    // video stream.
+                    gtcrnCancel.set(false)
+                    val gModel = withContext(Dispatchers.IO) { materializeGtcrn(context) }
+                    val wavIn = File(context.cacheDir, "gtcrn_in.wav")
+                    val wavOut = File(context.cacheDir, "gtcrn_out.wav")
+                    fun fracOf(ms: Long) = if (info.durationMs > 0) {
+                        (ms.toFloat() / info.durationMs).coerceIn(0f, 1f)
+                    } else 0f
+                    job = AudioJob.Running(0f)
+                    val extract = engine.run(
+                        MediaCommands.extractWav16k(input.absolutePath, wavIn.absolutePath)
+                    ) { ms -> job = AudioJob.Running(0.05f * fracOf(ms)) }
+                    if (extract.cancelled) {
+                        job = AudioJob.Cancelled
+                        return@launch
+                    }
+                    if (!extract.success) {
+                        job = AudioJob.Failed(
+                            MediaCommands.errorExcerpt(extract.output), extract.output.takeLast(600)
+                        )
+                        return@launch
+                    }
+                    withContext(Dispatchers.IO) {
+                        GtcrnEngine(gModel).use { eng ->
+                            eng.enhanceFile(
+                                wavIn, wavOut,
+                                { p -> job = AudioJob.Running(0.05f + 0.8f * p) },
+                                { gtcrnCancel.get() }
+                            )
+                        }
+                    }
+                    if (gtcrnCancel.get()) {
+                        job = AudioJob.Cancelled
+                        return@launch
+                    }
+                    val remux = engine.run(
+                        MediaCommands.remuxEnhanced(
+                            input.absolutePath, wavOut.absolutePath, outFile.absolutePath,
+                            softenStart, muteStart
+                        )
+                    ) { ms -> job = AudioJob.Running(0.85f + 0.15f * fracOf(ms)) }
+                    when {
+                        remux.cancelled -> job = AudioJob.Cancelled
+                        remux.success -> {
+                            val report = withContext(Dispatchers.IO) { validateExport(outFile) }
+                            previewProcessed = true
+                            job = AudioJob.Done(input, outFile, report)
+                        }
+                        else -> job = AudioJob.Failed(
+                            MediaCommands.errorExcerpt(remux.output), remux.output.takeLast(600)
+                        )
+                    }
+                    return@launch
+                }
+                val args = if (kind == AudioKind.NOISE) {
                     MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart, muteStart, clarityWet)
                 } else {
                     MediaCommands.enhanceAudio(
@@ -283,25 +338,30 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     ) { Text(if (sec == 0f) "0" else sec.toString()) }
                 }
             }
-            Text(
-                stringResource(R.string.m3_blend),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Row(modifier = Modifier.padding(top = 4.dp)) {
-                listOf(
-                    1.0f to R.string.m3_blend_full,
-                    0.7f to R.string.m3_blend_balanced,
-                    0.5f to R.string.m3_blend_clear
-                ).forEach { (wetValue, labelRes) ->
-                    val selected = clarityWet == wetValue
-                    OutlinedButton(
-                        onClick = { clarityWet = wetValue },
-                        modifier = Modifier.padding(end = 6.dp),
-                        colors = if (selected) ButtonDefaults.outlinedButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        ) else ButtonDefaults.outlinedButtonColors()
-                    ) { Text(stringResource(labelRes)) }
+            // The clarity blend only applies to the spectral modes;
+            // GTCRN preserves articulation by design (TD-004), so
+            // the control is hidden in neural mode.
+            if (mode != 3) {
+                Text(
+                    stringResource(R.string.m3_blend),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Row(modifier = Modifier.padding(top = 4.dp)) {
+                    listOf(
+                        1.0f to R.string.m3_blend_full,
+                        0.7f to R.string.m3_blend_balanced,
+                        0.5f to R.string.m3_blend_clear
+                    ).forEach { (wetValue, labelRes) ->
+                        val selected = clarityWet == wetValue
+                        OutlinedButton(
+                            onClick = { clarityWet = wetValue },
+                            modifier = Modifier.padding(end = 6.dp),
+                            colors = if (selected) ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ) else ButtonDefaults.outlinedButtonColors()
+                        ) { Text(stringResource(labelRes)) }
+                    }
                 }
             }
             Text(
@@ -354,7 +414,9 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     stringResource(R.string.m2_running, (j.fraction * 100).toInt()),
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                TextButton(onClick = { engine.cancel() }) { Text(stringResource(R.string.m2_cancel)) }
+                TextButton(onClick = { gtcrnCancel.set(true); engine.cancel() }) {
+                    Text(stringResource(R.string.m2_cancel))
+                }
             }
         }
 
@@ -436,6 +498,21 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
             Text(stringResource(R.string.m2_change_video))
         }
     }
+}
+
+/**
+ * The GTCRN model ships base64-encoded inside the assets (the
+ * project's source channel carries text only); decode it once into
+ * internal storage and verify its exact size.
+ */
+private fun materializeGtcrn(context: android.content.Context): File {
+    val f = File(context.filesDir, "gtcrn.onnx")
+    if (!f.exists() || f.length() != 535638L) {
+        val b64 = context.assets.open("gtcrn.onnx.b64")
+            .readBytes().toString(Charsets.US_ASCII)
+        f.writeBytes(Base64.decode(b64, Base64.DEFAULT))
+    }
+    return f
 }
 
 @Composable
