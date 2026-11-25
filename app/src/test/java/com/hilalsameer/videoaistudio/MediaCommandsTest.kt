@@ -71,6 +71,13 @@ class MediaCommandsTest {
             .joinToString(" ")
         assertTrue(joined.contains("arnndn=m='/data/files/std.rnnn'"))
         assertTrue(joined.contains("aresample=48000"))
+        // Pre-roll: the head runs through the network first, then trims.
+        assertTrue(joined.contains("asplit=2"))
+        assertTrue(joined.contains("atrim=start=1.5"))
+        val short = MediaCommands.denoiseNeural(
+            "in.mp4", "out.mp4", "/data/files/std.rnnn", preroll = false
+        ).joinToString(" ")
+        assertTrue(!short.contains("asplit"))
     }
 
     @Test

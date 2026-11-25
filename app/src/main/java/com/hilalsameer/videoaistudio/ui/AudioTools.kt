@@ -153,7 +153,8 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         }
                     }
                     MediaCommands.denoiseNeural(
-                        input.absolutePath, outFile.absolutePath, modelFile.absolutePath
+                        input.absolutePath, outFile.absolutePath, modelFile.absolutePath,
+                        preroll = info.durationMs >= 3000
                     )
                 } else if (kind == AudioKind.NOISE) {
                     MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode)

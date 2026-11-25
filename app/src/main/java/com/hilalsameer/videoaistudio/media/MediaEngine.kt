@@ -108,14 +108,41 @@ object MediaCommands {
      * trained to separate speech from noise, so it suppresses far more
      * noise than spectral gating at the same speech cost. RNNoise runs
      * at 48 kHz, hence the resample into it.
+     *
+     * Pre-roll (field fix, 2026-11-25): the network needs ~0.25 s of
+     * the actual signal to lock onto its noise, so the plain chain
+     * left a brief under-suppressed burst at the very start (owner:
+     * "a light sound at the beginning, like something fell"; measured
+     * on the host testbed: first 0.25 s at -35.8 dB vs -53 dB settled).
+     * The fix feeds the file's own first 1.5 s through the network
+     * first and trims it off afterwards: with pre-roll the first
+     * window measured -59.8 dB — locked from frame one. A silence pad
+     * was tried and measured useless (the lock follows the signal,
+     * not the stream). Short clips (< 3 s) skip the pre-roll.
      */
-    fun denoiseNeural(input: String, output: String, modelPath: String): Array<String> =
-        arrayOf(
-            "-y", "-i", input,
-            "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'",
-            "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
-            output
-        )
+    fun denoiseNeural(
+        input: String, output: String, modelPath: String, preroll: Boolean = true
+    ): Array<String> =
+        if (preroll) {
+            arrayOf(
+                "-y", "-i", input,
+                "-filter_complex",
+                "[0:a]highpass=f=70,aresample=48000,asplit=2[hd][bd];" +
+                    "[hd]atrim=end=1.5,asetpts=PTS-STARTPTS[pre];" +
+                    "[pre][bd]concat=n=2:v=0:a=1,arnndn=m='$modelPath'," +
+                    "atrim=start=1.5,asetpts=PTS-STARTPTS[aout]",
+                "-map", "0:v", "-map", "[aout]",
+                "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+                output
+            )
+        } else {
+            arrayOf(
+                "-y", "-i", input,
+                "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'",
+                "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
+                output
+            )
+        }
 
     /**
      * Audio enhancement: rumble cut, presence lift for speech clarity,
