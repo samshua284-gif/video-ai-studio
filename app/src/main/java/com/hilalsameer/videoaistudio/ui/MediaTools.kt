@@ -359,6 +359,13 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
             }
             else -> { }
         }
+
+        // A second change-video affordance at the bottom: the top one
+        // scrolls away on the result screen (owner field report).
+        Spacer(Modifier.height(20.dp))
+        TextButton(onClick = { picker.launch(arrayOf("video/*")) }) {
+            Text(stringResource(R.string.m2_change_video))
+        }
     }
 }
 

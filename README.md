@@ -17,8 +17,11 @@ reported verification.
   audio/subtitle tracks) via `MediaMetadataRetriever` +
   `MediaExtractor`. CI-verified and field-verified on a real device —
   see [MILESTONE-1-REPORT.md](MILESTONE-1-REPORT.md).
-- **Milestone 2 — Media engine: in progress** (audio extraction,
-  MP3/WAV export, trimming, compression, export validation).
+- **Milestone 2 — Media engine: COMPLETE.** FFmpegKit-powered audio
+  extraction (MP3/WAV), frame-accurate trimming and compression,
+  every export validated in-app. CI-verified and field-verified —
+  see [MILESTONE-2-REPORT.md](MILESTONE-2-REPORT.md).
+- **Milestone 3 — Audio enhancement & noise removal: in progress.**
 
 Later milestones (media engine, audio enhancement, speech recognition,
 translation, subtitles, video enhancement, batch/queue/history) are
