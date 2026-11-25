@@ -75,6 +75,9 @@ class MediaCommandsTest {
         // loudnorm (it only engages when the floor is truly low).
         assertTrue(plain.contains("agate=threshold=0.004"))
         assertTrue(plain.indexOf("agate") < plain.indexOf("loudnorm"))
+        // Soften-start fade is the LAST element of the enhance chain
+        // (after loudnorm), so no later gain can resurrect a thump.
+        assertTrue(plain.indexOf("afade=t=in:st=0:d=0.8") > plain.indexOf("loudnorm"))
     }
 
     @Test

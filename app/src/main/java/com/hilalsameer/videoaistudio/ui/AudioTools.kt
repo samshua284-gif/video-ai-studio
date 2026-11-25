@@ -169,7 +169,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                 } else {
                     MediaCommands.enhanceAudio(
                         input.absolutePath, outFile.absolutePath,
-                        modelFile?.absolutePath, preClean
+                        modelFile?.absolutePath, preClean, softenStart
                     )
                 }
                 job = AudioJob.Running(0f)
@@ -278,6 +278,16 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     onCheckedChange = { preClean = it }
                 )
                 Text(stringResource(R.string.m3_preclean), modifier = Modifier.padding(top = 12.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { softenStart = !softenStart }
+                    .padding(vertical = 4.dp)
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = softenStart,
+                    onCheckedChange = { softenStart = it }
+                )
+                Text(stringResource(R.string.m3_soften), modifier = Modifier.padding(top = 12.dp))
             }
             Text(
                 stringResource(R.string.m3_enhance_note),

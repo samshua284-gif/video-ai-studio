@@ -166,7 +166,8 @@ object MediaCommands {
      */
     fun enhanceAudio(
         input: String, output: String,
-        modelPath: String? = null, preClean: Boolean = false
+        modelPath: String? = null, preClean: Boolean = false,
+        softenStart: Boolean = true
     ): Array<String> {
         // loudnorm stays LAST: an aresample appended after it in
         // 0.3.1 could not negotiate a channel layout with the
@@ -189,9 +190,16 @@ object MediaCommands {
         // -86.3 dB gated. On raw noisy sources the floor sits above
         // the gate threshold, so the gate is a harmless no-op there.
         val gate = "agate=threshold=0.004:ratio=2:attack=5:release=150,"
+        // Soften-start rides AFTER loudnorm, deliberately: loudnorm's
+        // dynamic gain surges at the very start of a quiet file and
+        // resurrects a start thump that denoise+soften had buried
+        // (host measurement: a faded thump at -44.6 dB peak came out
+        // of plain enhance at -1.5 dB; with the end fade, -15.7 dB).
+        // Nothing after the fade can lift it again.
+        val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=60,${clean}${gate}equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-af", "highpass=f=60,${clean}${gate}equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11$fade",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
