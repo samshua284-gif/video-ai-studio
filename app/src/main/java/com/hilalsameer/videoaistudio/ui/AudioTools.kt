@@ -78,6 +78,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     var mode by remember { mutableStateOf(1) }
     var softenStart by remember { mutableStateOf(true) }
     var preClean by remember { mutableStateOf(true) }
+    var muteStart by remember { mutableStateOf(1.0f) }
     var previewProcessed by remember { mutableStateOf(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
@@ -162,10 +163,11 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                 val args = if (kind == AudioKind.NOISE && mode == 3) {
                     MediaCommands.denoiseNeural(
                         input.absolutePath, outFile.absolutePath, modelFile!!.absolutePath,
-                        preroll = info.durationMs >= 3000, softenStart = softenStart
+                        preroll = info.durationMs >= 3000, softenStart = softenStart,
+                        muteStartSec = muteStart
                     )
                 } else if (kind == AudioKind.NOISE) {
-                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart)
+                    MediaCommands.denoise(input.absolutePath, outFile.absolutePath, mode, softenStart, muteStart)
                 } else {
                     MediaCommands.enhanceAudio(
                         input.absolutePath, outFile.absolutePath,
@@ -261,6 +263,23 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                     onCheckedChange = { softenStart = it }
                 )
                 Text(stringResource(R.string.m3_soften), modifier = Modifier.padding(top = 12.dp))
+            }
+            Text(
+                stringResource(R.string.m3_mute),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                listOf(0f, 0.5f, 1f, 1.5f, 2f).forEach { sec ->
+                    val selected = muteStart == sec
+                    OutlinedButton(
+                        onClick = { muteStart = sec },
+                        modifier = Modifier.padding(end = 6.dp),
+                        colors = if (selected) ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        ) else ButtonDefaults.outlinedButtonColors()
+                    ) { Text(if (sec == 0f) "0" else sec.toString()) }
+                }
             }
             Text(
                 stringResource(R.string.m3_engine_note),

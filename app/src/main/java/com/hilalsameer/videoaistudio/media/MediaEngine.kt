@@ -93,16 +93,37 @@ object MediaCommands {
      * Noise removal (TD-003): adaptive FFT spectral denoising of the
      * audio track; the video stream is copied untouched.
      */
-    fun denoise(input: String, output: String, mode: Int, softenStart: Boolean = false): Array<String> {
+    /**
+     * Full mute of the first [sec] seconds with a 0.15 s ramp back.
+     * This is the surgical answer to a recording-start event: the
+     * gentle fade only softened a ~1 s thump's attack while its body
+     * played on (owner's correction, 2026-11-25 — the fade "fix" was
+     * declared working from a 0.15 s test thump; his lasts ~1 s).
+     * Host-verified: the muted window measures digital silence
+     * (-180 dB) and content after the window is untouched. Cost,
+     * disclosed in the UI: wanted content inside the window is
+     * muted too, so the window should match the artifact's length.
+     */
+    fun muteStartFilter(sec: Float): String {
+        val m = String.format(java.util.Locale.US, "%.2f", sec)
+        val r = String.format(java.util.Locale.US, "%.2f", sec + 0.15f)
+        return "volume='if(lt(t,$m),0,if(lt(t,$r),(t-$m)/0.15,1))':eval=frame"
+    }
+
+    fun denoise(
+        input: String, output: String, mode: Int,
+        softenStart: Boolean = false, muteStartSec: Float = 0f
+    ): Array<String> {
         val (nr, nf, tn) = denoiseModes[mode.coerceIn(0, 2)]
         val afftdn = buildString {
             append("afftdn=nr=$nr:nf=$nf")
             if (tn) append(":tn=1")
         }
         val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
+        val mute = if (muteStartSec > 0f) ",${muteStartFilter(muteStartSec)}" else ""
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=70,$afftdn$fade",
+            "-af", "highpass=f=70,$afftdn$fade$mute",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
@@ -128,7 +149,8 @@ object MediaCommands {
      */
     fun denoiseNeural(
         input: String, output: String, modelPath: String,
-        preroll: Boolean = true, softenStart: Boolean = false
+        preroll: Boolean = true, softenStart: Boolean = false,
+        muteStartSec: Float = 0f
     ): Array<String> {
         // Soften-start: a gentle 0.8 s fade-in. It exists because a
         // one-off event in the source (a recording-start thump) is
@@ -138,6 +160,7 @@ object MediaCommands {
         // a test thump's peak fell from -16.1 dB after cleaning to
         // -32.5 dB with the fade).
         val fade = if (softenStart) ",afade=t=in:st=0:d=0.8" else ""
+        val mute = if (muteStartSec > 0f) ",${muteStartFilter(muteStartSec)}" else ""
         return if (preroll) {
             arrayOf(
                 "-y", "-i", input,
@@ -145,7 +168,7 @@ object MediaCommands {
                 "[0:a]highpass=f=70,aresample=48000,asplit=2[hd][bd];" +
                     "[hd]atrim=end=1.5,asetpts=PTS-STARTPTS[pre];" +
                     "[pre][bd]concat=n=2:v=0:a=1,arnndn=m='$modelPath'," +
-                    "atrim=start=1.5,asetpts=PTS-STARTPTS$fade[aout]",
+                    "atrim=start=1.5,asetpts=PTS-STARTPTS$fade$mute[aout]",
                 "-map", "0:v", "-map", "[aout]",
                 "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
                 output
@@ -153,7 +176,7 @@ object MediaCommands {
         } else {
             arrayOf(
                 "-y", "-i", input,
-                "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'$fade",
+                "-af", "highpass=f=70,aresample=48000,arnndn=m='$modelPath'$fade$mute",
                 "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
                 output
             )

@@ -122,6 +122,13 @@ class MediaCommandsTest {
         val spectral = MediaCommands.denoise("in.mp4", "out.mp4", 1, softenStart = true)
             .joinToString(" ")
         assertTrue(spectral.contains("afade=t=in:st=0:d=0.8"))
+        // Start mute: present only when requested, on both engines,
+        // with the 0.15 s release ramp.
+        val muted = MediaCommands.denoiseNeural(
+            "in.mp4", "out.mp4", "/data/files/std.rnnn", muteStartSec = 1.0f
+        ).joinToString(" ")
+        assertTrue(muted.contains("volume='if(lt(t,1.00),0,if(lt(t,1.15),(t-1.00)/0.15,1))':eval=frame"))
+        assertTrue(!spectral.contains("eval=frame"))
     }
 
     @Test
