@@ -12,8 +12,8 @@ android {
         applicationId = "com.hilalsameer.videoaistudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 22
-        versionName = "0.4.2"
+        versionCode = 23
+        versionName = "0.4.3"
         ndk {
             // FFmpegKit ships four ABIs; his devices are ARM — keep the
             // APK lean and skip x86/x86_64 (TD-001).

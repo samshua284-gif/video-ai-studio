@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -82,6 +83,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     var preClean by remember { mutableStateOf(true) }
     var muteStart by remember { mutableStateOf(1.0f) }
     var previewProcessed by remember { mutableStateOf(false) }
+    var comparePlaySignal by remember { mutableStateOf(0) }
     val gtcrnCancel = remember { AtomicBoolean(false) }
 
     val titleRes = if (kind == AudioKind.NOISE) R.string.tool_noise else R.string.tool_audio
@@ -416,17 +418,26 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         Text(stringResource(R.string.m3_compare), style = MaterialTheme.typography.titleSmall)
                         Row(modifier = Modifier.padding(top = 6.dp)) {
                             OutlinedButton(
-                                onClick = { previewProcessed = false },
-                                modifier = Modifier.weight(1f)
+                                onClick = { previewProcessed = false; comparePlaySignal++ },
+                                modifier = Modifier.weight(1f),
+                                colors = if (!previewProcessed) ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ) else ButtonDefaults.outlinedButtonColors()
                             ) { Text(stringResource(R.string.m3_before)) }
                             Spacer(Modifier.padding(6.dp))
                             OutlinedButton(
-                                onClick = { previewProcessed = true },
-                                modifier = Modifier.weight(1f)
+                                onClick = { previewProcessed = true; comparePlaySignal++ },
+                                modifier = Modifier.weight(1f),
+                                colors = if (previewProcessed) ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                ) else ButtonDefaults.outlinedButtonColors()
                             ) { Text(stringResource(R.string.m3_after)) }
                         }
                         Spacer(Modifier.height(8.dp))
-                        ComparePlayer(file = if (previewProcessed) j.file else j.input)
+                        ComparePlayer(
+                            file = if (previewProcessed) j.file else j.input,
+                            playSignal = comparePlaySignal
+                        )
                         Spacer(Modifier.height(10.dp))
                         Button(
                             onClick = { saveExport(j.file) },
@@ -484,7 +495,7 @@ private fun materializeGtcrn(context: android.content.Context): File {
 }
 
 @Composable
-private fun ComparePlayer(file: File) {
+private fun ComparePlayer(file: File, playSignal: Int) {
     val context = LocalContext.current
     // 0.4.2: the owner reported the preview shows a frame but the
     // PlayerView controller's play button never starts playback
@@ -511,13 +522,41 @@ private fun ComparePlayer(file: File) {
         player.addListener(listener)
         onDispose { player.removeListener(listener); player.release() }
     }
+    // 0.4.3 (owner's field report on 0.4.2): three polish fixes.
+    // (a) PlayerView's own controller is disabled — its centre
+    //     play circle never answered taps inside this scrollable
+    //     Compose screen and stayed on screen as a dead promise;
+    //     our own button below is the only control now.
+    // (b) Tapping Original/Processed (playSignal changes) starts
+    //     that side playing immediately, so each side is heard on
+    //     its own — the comparison he asked for.
+    // (c) A finished video restarts: in STATE_ENDED, play() alone
+    //     does nothing ("plays only once"), so the button seeks
+    //     back to 0 first.
+    LaunchedEffect(playSignal) {
+        if (playSignal > 0) {
+            if (player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                player.seekTo(0)
+            }
+            player.play()
+        }
+    }
     Column {
         AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { this.player = player } },
+            factory = { ctx ->
+                PlayerView(ctx).apply { this.player = player; useController = false }
+            },
             modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
         )
         Row(modifier = Modifier.padding(top = 6.dp)) {
-            Button(onClick = { if (playing) player.pause() else player.play() }) {
+            Button(onClick = {
+                if (playing) player.pause() else {
+                    if (player.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                        player.seekTo(0)
+                    }
+                    player.play()
+                }
+            }) {
                 Text(stringResource(if (playing) R.string.m3_pause else R.string.m3_play))
             }
         }
