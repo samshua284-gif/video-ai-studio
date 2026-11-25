@@ -50,7 +50,7 @@ class MediaCommandsTest {
         assertTrue(light.contains("afftdn=nr=8:nf=-30"))
         assertTrue(!light.contains("tn=1"))
         val strong = MediaCommands.denoise("in.mp4", "out.mp4", 2).joinToString(" ")
-        assertTrue(strong.contains("afftdn=nr=24:nf=-14:tn=1"))
+        assertTrue(strong.contains("afftdn=nr=24:nf=-21:tn=1"))
         assertTrue(strong.contains("highpass=f=70"))
         assertTrue(strong.contains("-codec:v copy"))
     }

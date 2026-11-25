@@ -58,11 +58,16 @@ object MediaCommands {
             output
         )
 
-    /** Denoise modes: (noise reduction dB, noise floor dB, tracking). */
+    /**
+     * Denoise modes: (noise reduction dB, noise floor dB, tracking).
+     * afftdn's nf range in FFmpeg 6.0 is [-80, -20] — the first field
+     * build used -14 for Strong and the filter refused it (owner's
+     * log, 2026-11-25). Keep every nf inside the range.
+     */
     val denoiseModes = listOf(
         Triple(8, -30, false),
-        Triple(14, -22, true),
-        Triple(24, -14, true)
+        Triple(14, -24, true),
+        Triple(24, -21, true)
     )
 
     /**
@@ -77,7 +82,7 @@ object MediaCommands {
         }
         return arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=70,$afftdn",
+            "-af", "highpass=f=70,$afftdn,aresample=async=1:min_hard_comp=0.100",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )
@@ -90,7 +95,7 @@ object MediaCommands {
     fun enhanceAudio(input: String, output: String): Array<String> =
         arrayOf(
             "-y", "-i", input,
-            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-af", "highpass=f=60,equalizer=f=3000:width_type=o:width=2:g=3,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=async=1:min_hard_comp=0.100",
             "-codec:v", "copy", "-codec:a", "aac", "-b:a", "160k",
             output
         )

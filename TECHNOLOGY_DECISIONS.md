@@ -34,8 +34,11 @@ FFmpegKit 6.0-2 arm64 `libavfilter.so`, checked 2026-11-25):
 **Decision:** noise removal is built on FFmpeg's **afftdn** (adaptive
 FFT spectral denoiser with noise-floor tracking), preceded by a
 70 Hz high-pass. Three user modes vary reduction strength and floor:
-Light (nr=8, nf=−30), Balanced (nr=14, nf=−22, tracking on),
-Strong (nr=24, nf=−14, tracking on). Audio enhancement is a separate
+Light (nr=8, nf=−30), Balanced (nr=14, nf=−24, tracking on),
+Strong (nr=24, nf=−21, tracking on). (First field build used nf=−14
+for Strong; FFmpeg 6.0's afftdn accepts nf only in [−80, −20], the
+filter refused it on the owner's device, and the values were
+corrected the same day — the log he sent is the evidence.) Audio enhancement is a separate
 chain: high-pass 60 Hz + presence equalizer (+3 dB @ 3 kHz) +
 loudnorm to −16 LUFS. The video stream is copied untouched; only the
 audio is processed. The UI labels this honestly as spectral DSP
