@@ -97,4 +97,15 @@
     <string name="m3_close">إغلاق</string>
     <string name="m3_before">الأصل</string>
     <string name="m3_after">بعد المعالجة</string>
+    <string name="m4_language">لغة الكلام</string>
+    <string name="m4_run">فرّغ الكلام إلى نص</string>
+    <string name="m4_engine_note">محرك Whisper (small) على الجهاز عبر sherpa-onnx — بلا اتصال إطلاقًا، ولا يغادر شيء هاتفك. يُفرَّغ الصوت في أجزاء من ٢٥ ثانية، فالفيديوهات الطويلة تأخذ دقائق؛ والأجزاء الصامتة تُتخطّى. وكل جزء يحمل موضعه الحقيقي في الفيديو.</string>
+    <string name="m4_extracting">جارٍ استخراج الصوت…</string>
+    <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d…</string>
+    <string name="m4_result">النص المفرَّغ</string>
+    <string name="m4_segments">%1$d جزءًا · ينتهي الكلام عند %2$s</string>
+    <string name="m4_no_speech">لم يُتعرّف على كلام في هذا الفيديو.</string>
+    <string name="m4_edit_hint">يمكنك تعديل النص قبل تصدير ملف TXT. أما ملف SRT فيحفظ الأجزاء كما تُعرّف عليها بمواضعها الحقيقية.</string>
+    <string name="m4_export_txt">تصدير النص (TXT)</string>
+    <string name="m4_export_srt">تصدير الترجمات (SRT)</string>
 </resources>

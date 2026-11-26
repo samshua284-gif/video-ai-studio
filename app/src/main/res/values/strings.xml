@@ -97,4 +97,15 @@
     <string name="m3_close">Close</string>
     <string name="m3_before">Original</string>
     <string name="m3_after">Processed</string>
+    <string name="m4_language">Spoken language</string>
+    <string name="m4_run">Transcribe the speech</string>
+    <string name="m4_engine_note">On-device Whisper (small) via sherpa-onnx — fully offline, nothing leaves the phone. The audio is recognized in 25-second parts, so long videos take minutes; silent parts are skipped. Each part carries its real position in the video.</string>
+    <string name="m4_extracting">Extracting the audio…</string>
+    <string name="m4_transcribing">Transcribing part %1$d of %2$d…</string>
+    <string name="m4_result">Transcript</string>
+    <string name="m4_segments">%1$d parts · speech ends at %2$s</string>
+    <string name="m4_no_speech">No speech was recognized in this video.</string>
+    <string name="m4_edit_hint">You may edit the text before exporting the TXT. The SRT keeps the recognized parts with their real timestamps.</string>
+    <string name="m4_export_txt">Export text (TXT)</string>
+    <string name="m4_export_srt">Export subtitles (SRT)</string>
 </resources>

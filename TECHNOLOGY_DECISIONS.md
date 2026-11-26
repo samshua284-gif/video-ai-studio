@@ -228,3 +228,91 @@ must use it too rather than growing their own preview. The
 export validator is likewise a single shared function
 (`media/ExportValidator.kt`), so its 0.4.2 probe fix already
 covered every tool.
+
+## TD-006 — Translation correction layer for M5/M6 (design recorded 2026-11-25)
+
+**Status: DESIGN RECORDED — NOT IMPLEMENTED.** Recorded at the
+owner's order ("احفظ الخطة في وثائق المشروع") while the project
+is closed; it slots into M5 (translation) and M6 (subtitles)
+when the project reopens, and — per the owner's standing rule —
+is measured on real samples before any success is claimed.
+
+**Context.** The owner asked whether wrong words in offline
+video translation can be discovered and fixed automatically,
+and whether the layered plan below is the maximum possible.
+The governing lesson comes from his voice-translator project:
+general-purpose automatic correctors (Arabic QALB/CAMeL-class
+models) corrupted more than they fixed and were rejected, and
+an offline Helsinki model invented content and dropped phone
+numbers in job ads. A corrector that invents is more dangerous
+than an error that shows. This design therefore corrects only
+by measurable rules, and otherwise DETECTS and lets the owner
+decide — which is also the professional subtitling pipeline's
+own ceiling (ASR → MT → quality flagging → human decision),
+miniaturised for a phone.
+
+**Layer 1 — Safe automatic fixes (applied silently).**
+- Numbers/dates extracted from the source segment and verified
+  present and correct in the translation (digit conversion
+  ar/en is deterministic).
+- Glossary protection: proper names and place names shielded
+  from distortion; a known-error replacement list, in the
+  spirit of the voice translator's two proven automatic
+  corrections («الآن», «سلطنة عُمان»).
+
+**Layer 2 — Automatic detection (flags, never rewrites).**
+- Whisper per-segment confidence (avg logprob): weak segments
+  are highlighted in the subtitle editor.
+- Dual-engine agreement: OPUS-MT and NLLB translate the same
+  segment; agreement = trusted, disagreement = flag + show
+  both candidates on tap.
+- Back-translation divergence: the translation is translated
+  back and compared with the source; large divergence flags
+  the segment.
+- Optional upgrade: a distilled Quality-Estimation (QE) model
+  scoring segments without a reference — more precise than
+  back-translation, same flag-only role.
+
+**Layer 3 — Personal correction memory (learns from the owner).**
+When the owner edits a word in any subtitle, the correction
+pair is stored and applied automatically to future occurrences.
+His memory, growing with use; it invents nothing.
+
+**Upstream levers (fix errors before they exist).** Most
+"translation errors" are born in ASR: VAD-based segmentation
+so words are never cut, punctuation restoration, translating
+complete sentences rather than fragments, and carrying the
+previous sentence as context where the model supports it.
+
+**Bounded extras for flagged segments only.** Minimum-Bayes-risk
+voting among several candidate translations; a small on-device
+LLM as a CONSTRAINED post-editor (flagged segments only, barred
+from altering numbers/names, diff always shown); and an
+ear-check button playing the segment's original audio beside
+both translations — the owner's ear has twice settled what
+metrics could not (start thump, muffled articulation in M3).
+
+**Explicitly excluded.** A free-rewriting "smart corrector"
+that silently rephrases text — rejected on the owner's own
+evidence above. Cloud-giant translation is likewise outside
+the plan by TD-002 (offline-first); its quality is not the
+target and never was.
+
+## TD-007 — Milestone 4 binary delivery + segmentation (2026-11-26)
+
+ASR ships Whisper-small via sherpa-onnx 1.12.40 (TD-002). The repo's
+source channel carries text only and the model+AAR are ~430 MB of
+binaries, so they are NOT committed and NOT base64-stuffed (the
+GTCRN trick does not scale past ~1 MB): a Gradle task
+(`fetchAsrDeps`) downloads them in CI from their canonical sources
+(k2-fsa GitHub release; Hugging Face csukuangfj) and verifies
+SHA-256 against the exact artifacts field-proven in the owner's
+voice translator before every build. TD-002 already sanctions
+builder-side internet; the shipped app remains permission-free.
+
+Segmentation: sherpa's Whisper takes ≤~29.5 s per stream, so audio
+is decoded in 25 s windows (the translator's proven chunk); each
+window's text is stamped with the window's real bounds. Silent
+windows (RMS < 0.004) are skipped rather than transcribed —
+Whisper hallucinates on silence. Sentence-level segmentation is
+deferred to the Milestone 6 subtitle system, by design.

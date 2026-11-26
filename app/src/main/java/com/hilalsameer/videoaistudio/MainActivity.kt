@@ -58,6 +58,7 @@ import com.hilalsameer.videoaistudio.ui.AudioKind
 import com.hilalsameer.videoaistudio.ui.AudioToolScreen
 import com.hilalsameer.videoaistudio.ui.MediaToolScreen
 import com.hilalsameer.videoaistudio.ui.ToolKind
+import com.hilalsameer.videoaistudio.ui.TranscribeToolScreen
 import com.hilalsameer.videoaistudio.ui.VideoAIStudioTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -126,6 +127,7 @@ fun StudioApp() {
                 8 -> MediaToolScreen(ToolKind.TRIM, state, onBack = { nav.popBackStack() })
                 2 -> AudioToolScreen(AudioKind.NOISE, state, onBack = { nav.popBackStack() })
                 9 -> AudioToolScreen(AudioKind.ENHANCE, state, onBack = { nav.popBackStack() })
+                4 -> TranscribeToolScreen(state, onBack = { nav.popBackStack() })
                 else -> ToolStatusScreen(tool = TOOLS[idx], onBack = { nav.popBackStack() })
             }
         }
