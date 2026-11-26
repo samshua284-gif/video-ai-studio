@@ -151,7 +151,9 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         ) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        TranscribeService.start(context, uri.toString(), info.name, info.durationMs, lang)
+        TranscribeService.start(
+            context, uri.toString(), info.name, info.durationMs, lang, info.title
+        )
     }
 
     Column(
@@ -330,8 +332,9 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         modifier = Modifier.padding(top = 6.dp)
                     )
                     Spacer(Modifier.height(10.dp))
-                    val srcName = info?.name ?: j.inputName
-                    val base = srcName.substringBeforeLast('.', srcName)
+                    val base = SubtitleFormat.exportBaseName(
+                        info?.name ?: j.inputName, info?.title ?: j.title
+                    )
                     Button(
                         onClick = { export(base + "_transcript.txt", editedText) },
                         modifier = Modifier.fillMaxWidth()

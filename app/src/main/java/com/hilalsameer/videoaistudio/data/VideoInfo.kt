@@ -28,7 +28,11 @@ data class VideoInfo(
     val bitrate: Int?,
     val videoMime: String?,
     val audioMime: String?,
-    val tracks: List<TrackInfo>
+    val tracks: List<TrackInfo>,
+    /** The container's embedded title tag, when the file carries
+     *  one (0.5.6): names the subtitle exports meaningfully instead
+     *  of inheriting a bare numeric file name. */
+    val title: String? = null
 ) {
     val audioTrackCount: Int get() = tracks.count { it.kind == "audio" }
     val subtitleTrackCount: Int get() = tracks.count { it.kind == "text" }
@@ -136,6 +140,8 @@ fun inspectVideo(context: Context, uri: Uri): VideoInfo {
         uri = uri, name = name, sizeBytes = size, durationMs = durationMs,
         width = width, height = height, rotation = rotation, fps = fps,
         bitrate = bitrate, videoMime = videoMime, audioMime = audioMime,
-        tracks = tracks
+        tracks = tracks,
+        title = meta(MediaMetadataRetriever.METADATA_KEY_TITLE)
+            ?.trim()?.takeIf { it.isNotBlank() }
     )
 }

@@ -40,7 +40,8 @@ sealed interface TranscribeJobState {
     data class Done(
         val segments: List<AsrSegment>,
         val inputName: String,
-        val autoSaved: Boolean = false
+        val autoSaved: Boolean = false,
+        val title: String? = null
     ) : TranscribeJobState
     data class Failed(val excerpt: String, val logTail: String) : TranscribeJobState
 
@@ -106,18 +107,19 @@ class TranscribeService : Service() {
                 val name = intent.getStringExtra(EXTRA_NAME) ?: "video"
                 val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 0L)
                 val lang = intent.getStringExtra(EXTRA_LANG) ?: ""
+                val title = intent.getStringExtra(EXTRA_TITLE)
                 cancelFlag.set(false)
                 startForeground(NOTIF_ID, buildNotification(getString(R.string.m4_notif_running), null, null))
                 acquireWakeLock()
                 job = scope.launch {
-                    runPipeline(Uri.parse(uriStr), name, durationMs, lang)
+                    runPipeline(Uri.parse(uriStr), name, durationMs, lang, title)
                 }
             }
         }
         return START_NOT_STICKY
     }
 
-    private suspend fun runPipeline(uri: Uri, name: String, durationMs: Long, lang: String) {
+    private suspend fun runPipeline(uri: Uri, name: String, durationMs: Long, lang: String, title: String?) {
         try {
             state.value = TranscribeJobState.Preparing
             val input = withContext(Dispatchers.IO) { prepareInputFile(this@TranscribeService, uri, name) }
@@ -162,8 +164,8 @@ class TranscribeService : Service() {
                 // 0.5.4: the result must not live only in memory —
                 // write the SRT + TXT into Downloads the moment the
                 // job completes, before anything can kill us.
-                val saved = autoSave(name, segments)
-                finish(TranscribeJobState.Done(segments, name, saved))
+                val saved = autoSave(name, title, segments)
+                finish(TranscribeJobState.Done(segments, name, saved, title))
             }
         } catch (e: Exception) {
             finish(TranscribeJobState.Failed(e.message ?: "error", e.message ?: "error"))
@@ -240,10 +242,10 @@ class TranscribeService : Service() {
      * files on API 29+). Returns false on any failure — the in-app
      * export buttons remain the fallback.
      */
-    private fun autoSave(name: String, segments: List<AsrSegment>): Boolean {
+    private fun autoSave(name: String, title: String?, segments: List<AsrSegment>): Boolean {
         if (segments.isEmpty()) return false
         if (Build.VERSION.SDK_INT < 29) return false
-        val base = name.substringBeforeLast('.', name)
+        val base = SubtitleFormat.exportBaseName(name, title)
         return try {
             writeDownload(
                 base + "_subtitles.srt", "application/x-subrip",
@@ -328,17 +330,22 @@ class TranscribeService : Service() {
         private const val EXTRA_NAME = "name"
         private const val EXTRA_DURATION_MS = "durationMs"
         private const val EXTRA_LANG = "lang"
+        private const val EXTRA_TITLE = "title"
 
         /** The one job state both the service and the screen read. */
         val state = MutableStateFlow<TranscribeJobState>(TranscribeJobState.Idle)
 
-        fun start(context: Context, uri: String, name: String, durationMs: Long, lang: String) {
+        fun start(
+            context: Context, uri: String, name: String,
+            durationMs: Long, lang: String, title: String?
+        ) {
             val intent = Intent(context, TranscribeService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_URI, uri)
                 putExtra(EXTRA_NAME, name)
                 putExtra(EXTRA_DURATION_MS, durationMs)
                 putExtra(EXTRA_LANG, lang)
+                putExtra(EXTRA_TITLE, title)
             }
             if (Build.VERSION.SDK_INT >= 26) {
                 context.startForegroundService(intent)

@@ -42,4 +42,24 @@ object SubtitleFormat {
     /** Plain transcript: one part per line, in order. */
     fun buildTxt(segments: List<AsrSegment>): String =
         segments.joinToString("\n") { it.text.trim() }
+
+    /**
+     * Base name for the exported SRT/TXT files (0.5.6): the film's
+     * embedded title when it carries one — a name that says what
+     * the film IS — otherwise the file's own base name. Either way
+     * the result is filesystem-safe and length-capped.
+     */
+    fun exportBaseName(fileName: String, title: String?): String {
+        val fromTitle = sanitize(title ?: "")
+        if (fromTitle.isNotBlank()) return fromTitle
+        val base = sanitize(fileName.substringBeforeLast('.', fileName))
+        return base.ifBlank { "video" }
+    }
+
+    private fun sanitize(raw: String): String =
+        raw.replace(Regex("[\\\\/:*?\"<>|\\u0000-\\u001F]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(60)
+            .trim()
 }
