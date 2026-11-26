@@ -157,7 +157,17 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
 
         val info = state.currentInfo
-        if (state.currentUri == null || info == null) {
+        // 0.5.3: a job outlives this screen — the foreground service
+        // keeps working even when the app is closed completely. When
+        // a job is running or finished, never hide it behind the
+        // import gate just because the recreated screen forgot which
+        // video was imported.
+        val jobOwnsScreen = job is TranscribeJobState.Preparing ||
+            job is TranscribeJobState.Extracting ||
+            job is TranscribeJobState.Transcribing ||
+            job is TranscribeJobState.Done ||
+            job is TranscribeJobState.Failed
+        if ((state.currentUri == null || info == null) && !jobOwnsScreen) {
             Text(
                 text = stringResource(R.string.m2_need_import),
                 style = MaterialTheme.typography.bodyLarge,
@@ -177,22 +187,24 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             return@Column
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(stringResource(R.string.m2_input_file), style = MaterialTheme.typography.labelMedium)
-                Text(info.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text(
-                    "${formatDuration(info.durationMs)} · ${formatSize(info.sizeBytes)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        if (info != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(stringResource(R.string.m2_input_file), style = MaterialTheme.typography.labelMedium)
+                    Text(info.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        "${formatDuration(info.durationMs)} · ${formatSize(info.sizeBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        }
-        TextButton(onClick = { picker.launch(videoPickerRequest) }) {
-            Text(stringResource(R.string.m2_change_video))
+            TextButton(onClick = { picker.launch(videoPickerRequest) }) {
+                Text(stringResource(R.string.m2_change_video))
+            }
         }
         Spacer(Modifier.height(8.dp))
 
@@ -224,8 +236,24 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         when (val j = job) {
             is TranscribeJobState.Idle, is TranscribeJobState.Done,
             is TranscribeJobState.Failed, is TranscribeJobState.Cancelled -> {
-                Button(onClick = { startJob() }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.m4_run))
+                if (info != null) {
+                    Button(onClick = { startJob() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.m4_run))
+                    }
+                } else {
+                    // The screen forgot the video but a finished job's
+                    // result is below: re-importing the same video
+                    // re-attaches everything (0.5.3).
+                    Button(
+                        onClick = { picker.launch(videoPickerRequest) },
+                        modifier = Modifier.fillMaxWidth().height(64.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.import_video),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
             is TranscribeJobState.Preparing -> {
@@ -286,7 +314,8 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         modifier = Modifier.padding(top = 6.dp)
                     )
                     Spacer(Modifier.height(10.dp))
-                    val base = info.name.substringBeforeLast('.', info.name)
+                    val srcName = info?.name ?: j.inputName
+                    val base = srcName.substringBeforeLast('.', srcName)
                     Button(
                         onClick = { export(base + "_transcript.txt", editedText) },
                         modifier = Modifier.fillMaxWidth()
