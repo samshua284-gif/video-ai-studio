@@ -1,6 +1,7 @@
 package com.hilalsameer.videoaistudio.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -41,7 +42,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.hilalsameer.videoaistudio.KEY_ASR_LANG
 import com.hilalsameer.videoaistudio.R
+import com.hilalsameer.videoaistudio.STUDIO_PREFS
 import com.hilalsameer.videoaistudio.StudioState
 import com.hilalsameer.videoaistudio.TranscribeJobState
 import com.hilalsameer.videoaistudio.TranscribeService
@@ -72,7 +75,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     // starts it and observes its state, so leaving the screen — or
     // the screen sleeping — never touches the work.
     val job by TranscribeService.state.collectAsState()
-    var lang by remember { mutableStateOf("") }
+    // The spoken-language choice is one of the video's settings: it
+    // persists across app closes like the video itself (0.5.5).
+    val prefs = remember {
+        context.getSharedPreferences(STUDIO_PREFS, Context.MODE_PRIVATE)
+    }
+    var lang by remember { mutableStateOf(prefs.getString(KEY_ASR_LANG, "") ?: "") }
+    LaunchedEffect(lang) { prefs.edit().putString(KEY_ASR_LANG, lang).apply() }
     var editedText by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<File?>(null) }
 

@@ -1,6 +1,7 @@
 package com.hilalsameer.videoaistudio
 
 import android.content.Intent
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -89,6 +90,12 @@ class StudioState {
     var currentInfo: VideoInfo? by mutableStateOf(null)
 }
 
+/** What must survive the app being closed completely (0.5.5): the
+ *  imported video (restored by re-inspection) and the ASR language. */
+const val STUDIO_PREFS = "studio"
+const val KEY_CURRENT_URI = "current_uri"
+const val KEY_ASR_LANG = "asr_lang"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,6 +113,33 @@ class MainActivity : ComponentActivity() {
 fun StudioApp() {
     val nav = rememberNavController()
     val state = remember { StudioState() }
+    val context = LocalContext.current
+    var restored by remember { mutableStateOf(false) }
+    // 0.5.5: closing the app no longer loses the imported video.
+    // Every picker already takes a persistable URI grant; here the
+    // URI is stored, and on the next start the video is re-inspected
+    // from the file itself and restored with all its real data.
+    LaunchedEffect(Unit) {
+        val saved = context.getSharedPreferences(STUDIO_PREFS, Context.MODE_PRIVATE)
+            .getString(KEY_CURRENT_URI, null)
+        if (saved != null && state.currentUri == null) {
+            val uri = Uri.parse(saved)
+            val info = withContext(Dispatchers.IO) {
+                try { inspectVideo(context, uri) } catch (e: Exception) { null }
+            }
+            if (info != null) {
+                state.currentUri = uri
+                state.currentInfo = info
+            }
+        }
+        restored = true
+    }
+    LaunchedEffect(state.currentUri) {
+        if (restored) {
+            context.getSharedPreferences(STUDIO_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_CURRENT_URI, state.currentUri?.toString()).apply()
+        }
+    }
     NavHost(navController = nav, startDestination = "dashboard") {
         composable("dashboard") {
             DashboardScreen(
