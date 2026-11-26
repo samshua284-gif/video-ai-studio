@@ -165,6 +165,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         val jobOwnsScreen = job is TranscribeJobState.Preparing ||
             job is TranscribeJobState.Extracting ||
             job is TranscribeJobState.Transcribing ||
+            job is TranscribeJobState.Cancelling ||
             job is TranscribeJobState.Done ||
             job is TranscribeJobState.Failed
         if ((state.currentUri == null || info == null) && !jobOwnsScreen) {
@@ -284,6 +285,12 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     Text(stringResource(R.string.m2_cancel))
                 }
             }
+            is TranscribeJobState.Cancelling -> {
+                Row {
+                    CircularProgressIndicator()
+                    Text("  " + stringResource(R.string.m4_cancelling))
+                }
+            }
         }
 
         when (val j = job) {
@@ -325,6 +332,14 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         onClick = { export(base + "_subtitles.srt", SubtitleFormat.buildSrt(j.segments)) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(stringResource(R.string.m4_export_srt)) }
+                    if (j.autoSaved) {
+                        Text(
+                            stringResource(R.string.m4_autosave_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
                 }
             }
             is TranscribeJobState.Failed -> {

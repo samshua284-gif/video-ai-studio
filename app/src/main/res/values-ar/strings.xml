@@ -103,6 +103,9 @@
     <string name="m4_notif_channel">التفريغ الصوتي</string>
     <string name="m4_notif_running">جارٍ التفريغ في الخلفية…</string>
     <string name="m4_notif_done">اكتمل التفريغ الصوتي — النص جاهز في التطبيق.</string>
+    <string name="m4_notif_done_saved">اكتمل التفريغ — وحُفظ ملف SRT في مجلد التنزيلات.</string>
+    <string name="m4_cancelling">جارٍ الإيقاف…</string>
+    <string name="m4_autosave_note">حُفظ ملفا SRT وTXT تلقائيًا أيضًا في مجلد التنزيلات.</string>
     <string name="m4_notif_failed">فشل التفريغ الصوتي — افتح التطبيق للتفاصيل.</string>
     <string name="m4_extracting">جارٍ استخراج الصوت…</string>
     <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d…</string>

@@ -103,6 +103,9 @@
     <string name="m4_notif_channel">Transcription</string>
     <string name="m4_notif_running">Transcribing in the background…</string>
     <string name="m4_notif_done">Transcription complete — the text is ready in the app.</string>
+    <string name="m4_notif_done_saved">Transcription complete — the SRT file was saved to Downloads.</string>
+    <string name="m4_cancelling">Stopping…</string>
+    <string name="m4_autosave_note">The SRT and TXT files were also saved automatically to the Downloads folder.</string>
     <string name="m4_notif_failed">Transcription failed — open the app for details.</string>
     <string name="m4_extracting">Extracting the audio…</string>
     <string name="m4_transcribing">Transcribing part %1$d of %2$d…</string>

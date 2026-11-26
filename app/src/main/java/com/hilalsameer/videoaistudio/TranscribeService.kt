@@ -5,17 +5,21 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
+import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrEngine
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
+import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.prepareInputFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,8 +37,17 @@ sealed interface TranscribeJobState {
     data object Preparing : TranscribeJobState
     data class Extracting(val fraction: Float) : TranscribeJobState
     data class Transcribing(val done: Int, val total: Int) : TranscribeJobState
-    data class Done(val segments: List<AsrSegment>, val inputName: String) : TranscribeJobState
+    data class Done(
+        val segments: List<AsrSegment>,
+        val inputName: String,
+        val autoSaved: Boolean = false
+    ) : TranscribeJobState
     data class Failed(val excerpt: String, val logTail: String) : TranscribeJobState
+
+    /** Cancel was pressed: the request is registered instantly and
+     *  shown at once; the job itself stops at the next part
+     *  boundary (a native decode cannot be cut mid-part safely). */
+    data object Cancelling : TranscribeJobState
     data object Cancelled : TranscribeJobState
 }
 
@@ -78,6 +91,14 @@ class TranscribeService : Service() {
             ACTION_CANCEL -> {
                 cancelFlag.set(true)
                 engine.cancel()
+                // Instant visible response (0.5.4): the flag stops
+                // the job at the next part boundary, but the owner
+                // sees his press registered NOW, not up to a part
+                // later.
+                if (job?.isActive == true) {
+                    state.value = TranscribeJobState.Cancelling
+                    updateNotificationForce(getString(R.string.m4_cancelling))
+                }
             }
             ACTION_START -> {
                 if (job?.isActive == true) return START_NOT_STICKY
@@ -138,7 +159,11 @@ class TranscribeService : Service() {
             if (cancelFlag.get()) {
                 finish(TranscribeJobState.Cancelled)
             } else {
-                finish(TranscribeJobState.Done(segments, name))
+                // 0.5.4: the result must not live only in memory —
+                // write the SRT + TXT into Downloads the moment the
+                // job completes, before anything can kill us.
+                val saved = autoSave(name, segments)
+                finish(TranscribeJobState.Done(segments, name, saved))
             }
         } catch (e: Exception) {
             finish(TranscribeJobState.Failed(e.message ?: "error", e.message ?: "error"))
@@ -150,7 +175,11 @@ class TranscribeService : Service() {
         releaseWakeLock()
         when (terminal) {
             is TranscribeJobState.Done -> postFinalNotification(
-                getString(R.string.m4_notif_done), android.R.drawable.stat_sys_download_done
+                getString(
+                    if (terminal.autoSaved) R.string.m4_notif_done_saved
+                    else R.string.m4_notif_done
+                ),
+                android.R.drawable.stat_sys_download_done
             )
             is TranscribeJobState.Failed -> postFinalNotification(
                 getString(R.string.m4_notif_failed), android.R.drawable.stat_notify_error
@@ -195,6 +224,57 @@ class TranscribeService : Service() {
         lastNotifMs = now
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIF_ID, buildNotification(text, progress, max))
+    }
+
+    /** Unthrottled notification swap for state the owner must see
+     *  the instant it happens (a registered cancel press). */
+    private fun updateNotificationForce(text: String) {
+        lastNotifMs = System.currentTimeMillis()
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.notify(NOTIF_ID, buildNotification(text, null, null))
+    }
+
+    /**
+     * Write the finished SRT + TXT into the public Downloads folder
+     * via MediaStore (no storage permission needed for our own
+     * files on API 29+). Returns false on any failure — the in-app
+     * export buttons remain the fallback.
+     */
+    private fun autoSave(name: String, segments: List<AsrSegment>): Boolean {
+        if (segments.isEmpty()) return false
+        if (Build.VERSION.SDK_INT < 29) return false
+        val base = name.substringBeforeLast('.', name)
+        return try {
+            writeDownload(
+                base + "_subtitles.srt", "application/x-subrip",
+                SubtitleFormat.buildSrt(segments)
+            )
+            writeDownload(
+                base + "_transcript.txt", "text/plain",
+                SubtitleFormat.buildTxt(segments)
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun writeDownload(displayName: String, mime: String, content: String) {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+            put(MediaStore.Downloads.MIME_TYPE, mime)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("MediaStore insert failed")
+        resolver.openOutputStream(uri)?.use { out ->
+            out.write(content.toByteArray(Charsets.UTF_8))
+        } ?: throw IllegalStateException("MediaStore open failed")
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
     }
 
     private fun postFinalNotification(text: String, icon: Int) {
