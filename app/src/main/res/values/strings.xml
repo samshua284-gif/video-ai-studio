@@ -99,7 +99,11 @@
     <string name="m3_after">Processed</string>
     <string name="m4_language">Spoken language</string>
     <string name="m4_run">Transcribe the speech</string>
-    <string name="m4_engine_note">On-device Whisper (small) via sherpa-onnx — fully offline, nothing leaves the phone. The audio is recognized in 25-second parts, so long videos take minutes; silent parts are skipped. Each part carries its real position in the video.</string>
+    <string name="m4_engine_note">On-device Whisper (small) via sherpa-onnx — fully offline, nothing leaves the phone. The audio is recognized in 29-second parts; parts without speech are skipped. Transcription runs in the background at full speed even with the screen off — follow its progress in the notification.</string>
+    <string name="m4_notif_channel">Transcription</string>
+    <string name="m4_notif_running">Transcribing in the background…</string>
+    <string name="m4_notif_done">Transcription complete — the text is ready in the app.</string>
+    <string name="m4_notif_failed">Transcription failed — open the app for details.</string>
     <string name="m4_extracting">Extracting the audio…</string>
     <string name="m4_transcribing">Transcribing part %1$d of %2$d…</string>
     <string name="m4_result">Transcript</string>

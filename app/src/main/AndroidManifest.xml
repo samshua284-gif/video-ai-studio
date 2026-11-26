@@ -2,7 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Milestone 1 needs no broad permissions: video import uses the
-         Storage Access Framework picker, which grants per-file access. -->
+         Storage Access Framework picker, which grants per-file access.
+         0.5.1 adds only what the transcription foreground service
+         needs to survive Doze on long jobs (TD-008): run as a
+         foreground service, hold a wake lock, show its notification.
+         Still no INTERNET permission — the app is fully offline. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -19,6 +27,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".TranscribeService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

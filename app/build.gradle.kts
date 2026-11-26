@@ -17,8 +17,8 @@ android {
         applicationId = "com.hilalsameer.videoaistudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 27
-        versionName = "0.5.0"
+        versionCode = 28
+        versionName = "0.5.1"
         ndk {
             // FFmpegKit ships four ABIs; his devices are ARM — keep the
             // APK lean and skip x86/x86_64 (TD-001).
@@ -137,6 +137,14 @@ val fetchAsrDeps by tasks.registering {
                 "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt",
                 "models/whisper-small/small-tokens.txt",
                 "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
+            ),
+            // 0.5.1: silero VAD for the speech gate (TD-008) — the
+            // sherpa project's own release asset, hash-pinned like
+            // everything else here.
+            Triple(
+                "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+                "models/whisper-small/silero_vad.onnx",
+                "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
             )
         )
         for ((url, rel, sha) in deps) {

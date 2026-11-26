@@ -99,7 +99,11 @@
     <string name="m3_after">بعد المعالجة</string>
     <string name="m4_language">لغة الكلام</string>
     <string name="m4_run">فرّغ الكلام إلى نص</string>
-    <string name="m4_engine_note">محرك Whisper (small) على الجهاز عبر sherpa-onnx — بلا اتصال إطلاقًا، ولا يغادر شيء هاتفك. يُفرَّغ الصوت في أجزاء من ٢٥ ثانية، فالفيديوهات الطويلة تأخذ دقائق؛ والأجزاء الصامتة تُتخطّى. وكل جزء يحمل موضعه الحقيقي في الفيديو.</string>
+    <string name="m4_engine_note">محرك Whisper (small) على الجهاز عبر sherpa-onnx — بلا اتصال إطلاقًا، ولا يغادر شيء هاتفك. يُفرَّغ الصوت في أجزاء من ٢٩ ثانية؛ والأجزاء الخالية من الكلام تُتخطّى. ويجري التفريغ في الخلفية بكامل سرعته حتى والشاشة مطفأة — تابع تقدّمه من الإشعار.</string>
+    <string name="m4_notif_channel">التفريغ الصوتي</string>
+    <string name="m4_notif_running">جارٍ التفريغ في الخلفية…</string>
+    <string name="m4_notif_done">اكتمل التفريغ الصوتي — النص جاهز في التطبيق.</string>
+    <string name="m4_notif_failed">فشل التفريغ الصوتي — افتح التطبيق للتفاصيل.</string>
     <string name="m4_extracting">جارٍ استخراج الصوت…</string>
     <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d…</string>
     <string name="m4_result">النص المفرَّغ</string>

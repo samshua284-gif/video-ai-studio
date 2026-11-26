@@ -1,7 +1,10 @@
 package com.hilalsameer.videoaistudio.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -25,7 +28,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,33 +40,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.hilalsameer.videoaistudio.R
 import com.hilalsameer.videoaistudio.StudioState
+import com.hilalsameer.videoaistudio.TranscribeJobState
+import com.hilalsameer.videoaistudio.TranscribeService
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
-import com.hilalsameer.videoaistudio.media.AsrEngine
-import com.hilalsameer.videoaistudio.media.AsrSegment
-import com.hilalsameer.videoaistudio.media.MediaCommands
-import com.hilalsameer.videoaistudio.media.MediaEngine
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.exportsDir
-import com.hilalsameer.videoaistudio.media.prepareInputFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
-
-private sealed interface AsrJob {
-    data object Idle : AsrJob
-    data object Preparing : AsrJob
-    data class Extracting(val fraction: Float) : AsrJob
-    data class Transcribing(val done: Int, val total: Int) : AsrJob
-    data class Done(val segments: List<AsrSegment>) : AsrJob
-    data class Failed(val excerpt: String, val logTail: String) : AsrJob
-    data object Cancelled : AsrJob
-}
 
 /** Whisper language choices: "" = automatic detection (Feature E). */
 private val ASR_LANGS = listOf(
@@ -77,17 +68,22 @@ private val ASR_LANGS = listOf(
 fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val engine = remember { MediaEngine() }
-    val asr = remember { AsrEngine(context) }
-    val cancelFlag = remember { AtomicBoolean(false) }
-    var job by remember { mutableStateOf<AsrJob>(AsrJob.Idle) }
+    // The job lives in TranscribeService (0.5.1): this screen only
+    // starts it and observes its state, so leaving the screen — or
+    // the screen sleeping — never touches the work.
+    val job by TranscribeService.state.collectAsState()
     var lang by remember { mutableStateOf("") }
     var editedText by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<File?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose { asr.release() }
+    val doneSegments = (job as? TranscribeJobState.Done)?.segments
+    LaunchedEffect(doneSegments) {
+        if (doneSegments != null) editedText = SubtitleFormat.buildTxt(doneSegments)
     }
+
+    val notifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* best effort: the job runs either way */ }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) {
@@ -140,51 +136,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     fun startJob() {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
-        cancelFlag.set(false)
-        job = AsrJob.Preparing
-        scope.launch {
-            try {
-                val input = withContext(Dispatchers.IO) {
-                    prepareInputFile(context, uri, info.name)
-                }
-                val wav = File(context.cacheDir, "asr_in.wav")
-                job = AsrJob.Extracting(0f)
-                val extract = engine.run(
-                    MediaCommands.extractWav16k(input.absolutePath, wav.absolutePath)
-                ) { ms ->
-                    val frac = if (info.durationMs > 0) {
-                        (ms.toFloat() / info.durationMs).coerceIn(0f, 1f)
-                    } else 0f
-                    job = AsrJob.Extracting(frac)
-                }
-                if (extract.cancelled) {
-                    job = AsrJob.Cancelled
-                    return@launch
-                }
-                if (!extract.success) {
-                    job = AsrJob.Failed(
-                        MediaCommands.errorExcerpt(extract.output), extract.output.takeLast(600)
-                    )
-                    return@launch
-                }
-                job = AsrJob.Transcribing(0, 0)
-                val segments = withContext(Dispatchers.Default) {
-                    asr.transcribe(
-                        wav, lang,
-                        { done, total -> job = AsrJob.Transcribing(done, total) },
-                        { cancelFlag.get() }
-                    )
-                }
-                if (cancelFlag.get()) {
-                    job = AsrJob.Cancelled
-                    return@launch
-                }
-                editedText = SubtitleFormat.buildTxt(segments)
-                job = AsrJob.Done(segments)
-            } catch (e: Exception) {
-                job = AsrJob.Failed(e.message ?: "error", e.message ?: "error")
-            }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        TranscribeService.start(context, uri.toString(), info.name, info.durationMs, lang)
     }
 
     Column(
@@ -258,25 +216,29 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
         when (val j = job) {
-            is AsrJob.Idle, is AsrJob.Done, is AsrJob.Failed, is AsrJob.Cancelled -> {
+            is TranscribeJobState.Idle, is TranscribeJobState.Done,
+            is TranscribeJobState.Failed, is TranscribeJobState.Cancelled -> {
                 Button(onClick = { startJob() }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.m4_run))
                 }
             }
-            is AsrJob.Preparing -> {
+            is TranscribeJobState.Preparing -> {
                 Row { CircularProgressIndicator(); Text("  " + stringResource(R.string.m2_preparing)) }
+                TextButton(onClick = { TranscribeService.cancel(context) }) {
+                    Text(stringResource(R.string.m2_cancel))
+                }
             }
-            is AsrJob.Extracting -> {
+            is TranscribeJobState.Extracting -> {
                 LinearProgressIndicator(progress = { j.fraction }, modifier = Modifier.fillMaxWidth())
                 Text(
                     stringResource(R.string.m4_extracting),
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                TextButton(onClick = { engine.cancel() }) {
+                TextButton(onClick = { TranscribeService.cancel(context) }) {
                     Text(stringResource(R.string.m2_cancel))
                 }
             }
-            is AsrJob.Transcribing -> {
+            is TranscribeJobState.Transcribing -> {
                 val frac = if (j.total > 0) j.done.toFloat() / j.total else 0f
                 LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
                 Text(
@@ -284,14 +246,14 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     else stringResource(R.string.m2_preparing),
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                TextButton(onClick = { cancelFlag.set(true) }) {
+                TextButton(onClick = { TranscribeService.cancel(context) }) {
                     Text(stringResource(R.string.m2_cancel))
                 }
             }
         }
 
         when (val j = job) {
-            is AsrJob.Done -> {
+            is TranscribeJobState.Done -> {
                 Spacer(Modifier.height(16.dp))
                 if (j.segments.isEmpty()) {
                     Text(stringResource(R.string.m4_no_speech), style = MaterialTheme.typography.bodyLarge)
@@ -330,7 +292,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     ) { Text(stringResource(R.string.m4_export_srt)) }
                 }
             }
-            is AsrJob.Failed -> {
+            is TranscribeJobState.Failed -> {
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.m2_failed), color = MaterialTheme.colorScheme.error)
                 Text(
@@ -342,7 +304,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 )
                 Text(j.logTail, style = MaterialTheme.typography.bodySmall)
             }
-            is AsrJob.Cancelled -> {
+            is TranscribeJobState.Cancelled -> {
                 Spacer(Modifier.height(16.dp))
                 Text(stringResource(R.string.m2_cancelled))
             }

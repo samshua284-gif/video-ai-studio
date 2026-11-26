@@ -68,3 +68,15 @@ Status: **IMPLEMENTED — host-verified; phone verification is the owner's**
 - Editing the transcript affects the TXT export; the SRT always
   carries the recognized segments (stated on the screen itself).
 - APK grows by ~360 MB of model + ~35 MB of sherpa native libraries.
+
+## Addendum — 0.5.1 (2026-11-27, TD-008)
+
+Fixes the first night's field failure (Doze froze the job:
+~25 min/part overnight vs ~45 s/part awake) and adds the speed
+levers: foreground service + wake lock + progress/completion
+notifications; silero VAD gate skipping non-speech windows;
+29 s windows; recognizer threads up to the device's cores.
+Status at build time: implemented, host-compiled (kotlinc against
+the real sherpa classes), unit tests extended (VadGateTest) —
+phone proof pending the owner's re-run of the same film with the
+screen off.

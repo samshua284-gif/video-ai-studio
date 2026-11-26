@@ -316,3 +316,32 @@ window's text is stamped with the window's real bounds. Silent
 windows (RMS < 0.004) are skipped rather than transcribed —
 Whisper hallucinates on silence. Sentence-level segmentation is
 deferred to the Milestone 6 subtitle system, by design.
+
+## TD-008 — Long-job survival + speech gate (0.5.1, 2026-11-27)
+
+Field evidence (first night of 0.5.0): with the screen awake the
+owner's phone decoded at ~45 s per 25 s part; overnight, screen
+asleep, it managed 13 parts in 5.5 hours (~25 min/part) — the
+activity-bound coroutine was frozen by Doze. The engine was never
+the problem; the job's host was. Decisions:
+
+- The pipeline moves into a **foreground service**
+  (TranscribeService, type dataSync) holding a **partial wake
+  lock** (6 h timeout) for the job's duration, with a progress
+  notification (part n/N, cancel action) and a completion
+  notification. The screen only starts the job and observes its
+  state. Permissions added: FOREGROUND_SERVICE,
+  FOREGROUND_SERVICE_DATA_SYNC, WAKE_LOCK, POST_NOTIFICATIONS.
+  INTERNET remains absent — TD-002 untouched.
+- **VAD gate:** silero_vad.onnx (643,854 B, sherpa's own release
+  asset, SHA-256 pinned in fetchAsrDeps like every other binary)
+  runs before the decoder; a 29 s window with < 1.0 s of detected
+  speech is skipped (pure decision in VadGate, unit-tested). The
+  RMS silence floor stays as a pre-filter. Any VAD error falls
+  back to decoding — the gate may waste time, never speech.
+- **Windows 25 s → 29 s** (~14% fewer encoder passes; sherpa's
+  ceiling is ~29.5 s) and **recognizer threads 4 → min(8, cores)**.
+- Declared limits: VAD behaviour and thread gains are measurable
+  only on the owner's phone; the service/wake-lock mechanics are
+  standard Android, compile- and CI-verified here. The decisive
+  test is the same film re-run with the screen off.
