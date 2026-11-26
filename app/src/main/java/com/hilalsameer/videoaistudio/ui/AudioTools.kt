@@ -266,8 +266,14 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = { picker.launch(videoPickerRequest) },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text(stringResource(R.string.import_video)) }
+                modifier = Modifier.fillMaxWidth().height(64.dp)
+            ) {
+                Text(
+                    stringResource(R.string.import_video),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             return@Column
         }
 

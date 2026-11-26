@@ -194,9 +194,13 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
                     )
                 )
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().height(64.dp)
         ) {
-            Text(stringResource(R.string.import_video))
+            Text(
+                stringResource(R.string.import_video),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
         Text(
             text = stringResource(R.string.import_hint),
