@@ -1,3 +1,8 @@
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -95,8 +100,8 @@ dependencies {
 // A mismatch fails the build loudly — a corrupt model never ships.
 // ---------------------------------------------------------------------------
 
-fun sha256Hex(f: java.io.File): String {
-    val md = java.security.MessageDigest.getInstance("SHA-256")
+fun sha256Hex(f: File): String {
+    val md = MessageDigest.getInstance("SHA-256")
     f.inputStream().use { inp ->
         val buf = ByteArray(1 shl 16)
         while (true) {
@@ -135,11 +140,11 @@ val fetchAsrDeps by tasks.registering {
             )
         )
         for ((url, rel, sha) in deps) {
-            val out = java.io.File(depsRoot, rel)
+            val out = File(depsRoot, rel)
             if (out.exists() && sha256Hex(out) == sha) continue
             out.parentFile.mkdirs()
-            val tmp = java.io.File(out.parentFile, out.name + ".part")
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            val tmp = File(out.parentFile, out.name + ".part")
+            val conn = URL(url).openConnection() as HttpURLConnection
             conn.setRequestProperty("User-Agent", "VideoAIStudio-CI")
             conn.connectTimeout = 60_000
             conn.readTimeout = 600_000
