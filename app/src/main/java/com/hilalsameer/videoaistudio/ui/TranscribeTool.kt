@@ -278,8 +278,16 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     )
                 }
             }
-            TextButton(onClick = { picker.launch(videoPickerRequest) }) {
-                Text(stringResource(R.string.m2_change_video))
+            // 0.6.3 (owner): the audio import sits next to
+            // «another video» in the loaded state too — not only
+            // on the empty screen.
+            Row {
+                TextButton(onClick = { picker.launch(videoPickerRequest) }) {
+                    Text(stringResource(R.string.m2_change_video))
+                }
+                TextButton(onClick = { audioPicker.launch(audioTypes) }) {
+                    Text(stringResource(R.string.m4_import_audio))
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
