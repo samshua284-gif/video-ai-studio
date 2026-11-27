@@ -491,3 +491,38 @@ EXTRA_INITIAL_URI for the Downloads document — a hint each
 picker may honor; the audio/* filter applies regardless. That is
 the strongest steering the platform offers a caller; it is
 recorded here as best-effort by design, not as a guarantee.
+
+## TD-013 — Speech gate completes the noise tool (0.7.2, 2026-11-27)
+
+The owner's standing rule — maximum capability at every milestone
+without draining time — was measured against the noise tool by his
+own field comparison the same evening: a clip whose leading gasp
+CapCut's gated cleanup erased «as if it never was» kept that gasp
+through our GTCRN denoise (measured on his file: the processed
+copy's first second is absolute digital silence; ours preserved
+the breath as voice-like content). GTCRN's ceiling is exactly
+this: it removes steady noise and protects everything produced
+by a human mouth, breaths included. The gap is closed with a
+second stage, not a different engine:
+
+- After GTCRN, the silero VAD (the same model and configuration
+  transcription trusts, via the new standalone VadSpans — a
+  deliberate small duplication rather than touching AsrEngine,
+  whose behaviour 0.7.0 froze) marks the speech spans of the
+  denoised WAV.
+- SpeechGate silences everything outside those spans, with the
+  three protections a naive gate lacks: spans grow by safety
+  margins (0.15 s before / 0.25 s after) so word onsets and
+  tails are never clipped; pauses under 0.35 s are kept whole
+  as natural prosody; all cuts ride 30 ms fades (click-free).
+- Safety rails: no speech spans → the gate does not run at all
+  (music and nature recordings are never wiped); any gate/VAD
+  failure falls back to the ungated denoised audio — the gate
+  can never fail a finished denoise. The option is a checkbox,
+  default ON, beside the existing soften-start control; the
+  manual start-mute remains for what it was built for.
+
+Verified before the push: the pure region/gain logic and a
+synthetic-WAV pass (gasp window, mid pause, two speech windows)
+run in the host harness against the shipped Kotlin; the Compose
+wiring is arbitrated by CI like every UI change before it.

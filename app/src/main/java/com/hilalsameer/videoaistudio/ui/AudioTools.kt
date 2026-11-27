@@ -43,6 +43,9 @@ import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
 import com.hilalsameer.videoaistudio.media.GtcrnEngine
+import com.hilalsameer.videoaistudio.media.SpeechGate
+import com.hilalsameer.videoaistudio.media.VadSpans
+import com.hilalsameer.videoaistudio.media.WaveIo
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
 import com.hilalsameer.videoaistudio.media.ValidationReport
@@ -74,6 +77,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     val engine = remember { MediaEngine() }
     var job by remember { mutableStateOf<AudioJob>(AudioJob.Idle) }
     var softenStart by remember { mutableStateOf(true) }
+    var breathGate by remember { mutableStateOf(true) }
     var preClean by remember { mutableStateOf(true) }
     var muteStart by remember { mutableStateOf(1.0f) }
     var previewProcessed by remember { mutableStateOf(false) }
@@ -188,7 +192,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         GtcrnEngine(gModel).use { eng ->
                             eng.enhanceFile(
                                 wavIn, wavOut,
-                                { p -> job = AudioJob.Running(0.05f + 0.8f * p) },
+                                { p -> job = AudioJob.Running(0.05f + 0.7f * p) },
                                 { gtcrnCancel.get() }
                             )
                         }
@@ -197,12 +201,45 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         job = AudioJob.Cancelled
                         return@launch
                     }
+                    // 0.7.2 (TD-013): the speech gate — silence what
+                    // is not speech (breaths, gasps, leftover room
+                    // noise) on the denoised WAV, with safety
+                    // margins around every speech span. Best-effort
+                    // by design: any failure keeps the ungated
+                    // denoised audio rather than failing a finished
+                    // denoise.
+                    var remuxWav = wavOut
+                    if (breathGate) {
+                        val gated = withContext(Dispatchers.IO) {
+                            try {
+                                val spans = VadSpans.speechSpans(context, wavOut) { gtcrnCancel.get() }
+                                val totalSec = WaveIo.readHeader(wavOut).totalSamples / 16000.0
+                                val regions = SpeechGate.keepRegions(spans, totalSec)
+                                if (regions.isEmpty()) null
+                                else {
+                                    val wavGated = File(context.cacheDir, "gtcrn_gated.wav")
+                                    val ok = SpeechGate.processFile(
+                                        wavOut, wavGated, regions,
+                                        SpeechGate.DEFAULT,
+                                        { p -> job = AudioJob.Running(0.75f + 0.15f * p) },
+                                        { gtcrnCancel.get() }
+                                    )
+                                    if (ok) wavGated else null
+                                }
+                            } catch (e: Exception) { null }
+                        }
+                        if (gtcrnCancel.get()) {
+                            job = AudioJob.Cancelled
+                            return@launch
+                        }
+                        if (gated != null) remuxWav = gated
+                    }
                     val remux = engine.run(
                         MediaCommands.remuxEnhanced(
-                            input.absolutePath, wavOut.absolutePath, outFile.absolutePath,
+                            input.absolutePath, remuxWav.absolutePath, outFile.absolutePath,
                             softenStart, muteStart
                         )
-                    ) { ms -> job = AudioJob.Running(0.85f + 0.15f * fracOf(ms)) }
+                    ) { ms -> job = AudioJob.Running(0.9f + 0.1f * fracOf(ms)) }
                     when {
                         remux.cancelled -> job = AudioJob.Cancelled
                         remux.success -> {
@@ -317,6 +354,22 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                 )
                 Text(stringResource(R.string.m3_soften), modifier = Modifier.padding(top = 12.dp))
             }
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { breathGate = !breathGate }
+                    .padding(vertical = 4.dp)
+            ) {
+                androidx.compose.material3.Checkbox(
+                    checked = breathGate,
+                    onCheckedChange = { breathGate = it }
+                )
+                Text(stringResource(R.string.m3_breath_gate), modifier = Modifier.padding(top = 12.dp))
+            }
+            Text(
+                stringResource(R.string.m3_breath_gate_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
             Text(
                 stringResource(R.string.m3_mute),
                 style = MaterialTheme.typography.bodyMedium,
