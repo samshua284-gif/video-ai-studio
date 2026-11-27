@@ -128,7 +128,7 @@
     <string name="m5_merge_title">Merge SRT parts (for a film split into parts)</string>
     <string name="m5_merge_add">Add a part</string>
     <string name="m5_merge_part">Part %1$d: %2$s (%3$d lines)</string>
-    <string name="m5_merge_duration_hint">This part's video length (minutes:seconds)</string>
+    <string name="m5_merge_duration_hint">This part\'s video length (minutes:seconds)</string>
     <string name="m5_merge_do">Merge in order</string>
     <string name="m5_merge_done">Merged: %1$d parts in order</string>
     <string name="m5_src_lang">Source language</string>
@@ -152,7 +152,7 @@
     <string name="m5_same_lang">Source and target are the same language — pick a different target.</string>
     <string name="m5_no_source">Choose a source first: the latest transcription, an imported SRT, or merged parts.</string>
     <string name="m5_howto_1">Pick the source: the latest transcription appears here automatically, or import any SRT file.</string>
-    <string name="m5_howto_2">If the film was split into parts, add each part's SRT in order under Merge, write each part's exact video length, and press Merge in order — one file comes out, ready for production.</string>
+    <string name="m5_howto_2">If the film was split into parts, add each part\'s SRT in order under Merge, write each part\'s exact video length, and press Merge in order — one file comes out, ready for production.</string>
     <string name="m5_howto_3">Choose the source language and the language to translate to, then press Start translation. The work runs in the background with a notification, like transcription.</string>
     <string name="m5_howto_4">Timestamps never change: every translated line keeps its original timing, so the translated SRT matches the film directly.</string>
     <string name="m5_howto_5">When it finishes, the translated SRT and TXT are saved automatically to Downloads. A ⚠ line under the result names any part whose numbers need your check. Edit the text before exporting if you wish — your edits are remembered and served back to you on identical future segments.</string>
