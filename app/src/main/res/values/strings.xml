@@ -116,6 +116,7 @@
     <string name="m4_export_txt">Export text (TXT)</string>
     <string name="m4_export_srt">Export subtitles (SRT)</string>
     <string name="m4_import_media">Import a video or an audio clip</string>
+    <string name="m4_import_audio">Import an audio clip</string>
     <string name="howto_title">How to use</string>
     <string name="m4_howto_1">Import a video — or an audio clip in any format (MP3, M4A, WAV, OGG…) — with the import button.</string>
     <string name="m4_howto_2">Choose the spoken language, or leave it on Auto.</string>

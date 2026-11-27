@@ -58,6 +58,38 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/**
+ * The two import boxes (owner's design, 0.6.1): side by side but
+ * fully separate — video goes to the gallery, audio goes to the
+ * audios.
+ */
+@Composable
+fun ImportRow(onVideo: () -> Unit, onAudio: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Button(
+            onClick = onVideo,
+            modifier = Modifier.weight(1f).height(64.dp)
+        ) {
+            Text(
+                stringResource(R.string.import_video),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.padding(6.dp))
+        Button(
+            onClick = onAudio,
+            modifier = Modifier.weight(1f).height(64.dp)
+        ) {
+            Text(
+                stringResource(R.string.m4_import_audio),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
 /** Whisper language choices: "" = automatic detection (Feature E). */
 private val ASR_LANGS = listOf(
     "" to "تلقائي",
@@ -94,12 +126,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { /* best effort: the job runs either way */ }
 
-    // 0.6.0 (owner's order): the import choice is a video OR an
-    // audio clip in any format — the pipeline decodes the audio
-    // track either way (FFmpeg extractWav16k), so an MP3 yields
-    // its SRT/TXT exactly like a film does. OpenDocument covers
-    // both families in one picker.
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    // 0.6.1 (owner's field correction of 0.6.0): TWO separate
+    // import boxes side by side — video opens the GALLERY (Photo
+    // Picker, as before), audio opens the system's AUDIO view
+    // directly (OpenDocument filtered to audio/*). The single
+    // combined picker of 0.6.0 landed in the file manager and
+    // imported nothing on his phone.
+    fun onPicked(uri: Uri?) {
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -115,7 +148,16 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             }
         }
     }
-    val mediaTypes = arrayOf("video/*", "audio/*")
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        onPicked(uri)
+    }
+    val videoPickerRequest = androidx.activity.result.PickVisualMediaRequest(
+        ActivityResultContracts.PickVisualMedia.VideoOnly
+    )
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        onPicked(uri)
+    }
+    val audioTypes = arrayOf("audio/*")
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -194,22 +236,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             job is TranscribeJobState.Done ||
             job is TranscribeJobState.Failed
         if ((state.currentUri == null || info == null) && !jobOwnsScreen) {
-            Text(
-                text = stringResource(R.string.m2_need_import),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Owner's order (0.6.1): no explanatory text here — the
+            // two import boxes side by side speak for themselves,
+            // and «طريقة الاستخدام» above stays.
+            ImportRow(
+                onVideo = { picker.launch(videoPickerRequest) },
+                onAudio = { audioPicker.launch(audioTypes) }
             )
-            Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { picker.launch(mediaTypes) },
-                modifier = Modifier.fillMaxWidth().height(64.dp)
-            ) {
-                Text(
-                    stringResource(R.string.m4_import_media),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
             return@Column
         }
 
@@ -228,7 +261,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     )
                 }
             }
-            TextButton(onClick = { picker.launch(mediaTypes) }) {
+            TextButton(onClick = { picker.launch(videoPickerRequest) }) {
                 Text(stringResource(R.string.m2_change_video))
             }
         }
@@ -268,18 +301,12 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     }
                 } else {
                     // The screen forgot the video but a finished job's
-                    // result is below: re-importing the same video
+                    // result is below: re-importing the same file
                     // re-attaches everything (0.5.3).
-                    Button(
-                        onClick = { picker.launch(mediaTypes) },
-                        modifier = Modifier.fillMaxWidth().height(64.dp)
-                    ) {
-                        Text(
-                            stringResource(R.string.m4_import_media),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    ImportRow(
+                        onVideo = { picker.launch(videoPickerRequest) },
+                        onAudio = { audioPicker.launch(audioTypes) }
+                    )
                 }
             }
             is TranscribeJobState.Preparing -> {

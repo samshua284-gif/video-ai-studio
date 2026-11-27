@@ -116,6 +116,7 @@
     <string name="m4_export_txt">تصدير النص (TXT)</string>
     <string name="m4_export_srt">تصدير الترجمات (SRT)</string>
     <string name="m4_import_media">استيراد فيديو أو مقطع صوتي</string>
+    <string name="m4_import_audio">استيراد مقطع صوتي</string>
     <string name="howto_title">طريقة الاستخدام</string>
     <string name="m4_howto_1">استورد فيديو — أو مقطعًا صوتيًا بأي صيغة (MP3 وM4A وWAV وOGG…) — بزر الاستيراد.</string>
     <string name="m4_howto_2">اختر لغة الكلام، أو اتركها على «تلقائي».</string>
