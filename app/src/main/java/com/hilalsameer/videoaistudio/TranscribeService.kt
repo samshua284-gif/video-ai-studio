@@ -5,21 +5,17 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
-import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrEngine
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
-import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.prepareInputFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +36,6 @@ sealed interface TranscribeJobState {
     data class Done(
         val segments: List<AsrSegment>,
         val inputName: String,
-        val autoSaved: Boolean = false,
         val title: String? = null
     ) : TranscribeJobState
     data class Failed(val excerpt: String, val logTail: String) : TranscribeJobState
@@ -159,20 +154,22 @@ class TranscribeService : Service() {
                 },
                 { cancelFlag.get() }
             )
-            // 0.6.4: Whisper's ~29 s window segments become
-            // sentence cues before anything downstream sees them
-            // (Done state, auto-save, translation source) — one
-            // giant cue per window was the owner's field report.
+            // 0.6.4: Whisper's window segments become sentence
+            // cues before anything downstream sees them (Done
+            // state, translation source) — one giant cue per
+            // window was the owner's field report. 0.7.0: the
+            // windows themselves are now speech chunks.
             val segments = com.hilalsameer.videoaistudio.media.SubtitleSegmenter
                 .resegment(windowSegments)
             if (cancelFlag.get()) {
                 finish(TranscribeJobState.Cancelled)
             } else {
-                // 0.5.4: the result must not live only in memory —
-                // write the SRT + TXT into Downloads the moment the
-                // job completes, before anything can kill us.
-                val saved = autoSave(name, title, segments)
-                finish(TranscribeJobState.Done(segments, name, saved, title))
+                // 0.7.0: auto-save is GONE (the owner's order —
+                // "manual saving is better"). Nothing is written
+                // to Downloads on completion; the result lives in
+                // the Done state, and saving happens only from the
+                // export buttons the owner presses himself.
+                finish(TranscribeJobState.Done(segments, name, title))
             }
         } catch (e: Exception) {
             finish(TranscribeJobState.Failed(e.message ?: "error", e.message ?: "error"))
@@ -184,10 +181,7 @@ class TranscribeService : Service() {
         releaseWakeLock()
         when (terminal) {
             is TranscribeJobState.Done -> postFinalNotification(
-                getString(
-                    if (terminal.autoSaved) R.string.m4_notif_done_saved
-                    else R.string.m4_notif_done
-                ),
+                getString(R.string.m4_notif_done),
                 android.R.drawable.stat_sys_download_done
             )
             is TranscribeJobState.Failed -> postFinalNotification(
@@ -241,49 +235,6 @@ class TranscribeService : Service() {
         lastNotifMs = System.currentTimeMillis()
         val nm = getSystemService(NotificationManager::class.java)
         nm.notify(NOTIF_ID, buildNotification(text, null, null))
-    }
-
-    /**
-     * Write the finished SRT + TXT into the public Downloads folder
-     * via MediaStore (no storage permission needed for our own
-     * files on API 29+). Returns false on any failure — the in-app
-     * export buttons remain the fallback.
-     */
-    private fun autoSave(name: String, title: String?, segments: List<AsrSegment>): Boolean {
-        if (segments.isEmpty()) return false
-        if (Build.VERSION.SDK_INT < 29) return false
-        val base = SubtitleFormat.exportBaseName(name, title)
-        return try {
-            writeDownload(
-                base + "_subtitles.srt", "application/x-subrip",
-                SubtitleFormat.buildSrt(segments)
-            )
-            writeDownload(
-                base + "_transcript.txt", "text/plain",
-                SubtitleFormat.buildTxt(segments)
-            )
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun writeDownload(displayName: String, mime: String, content: String) {
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
-            put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val resolver = contentResolver
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw IllegalStateException("MediaStore insert failed")
-        resolver.openOutputStream(uri)?.use { out ->
-            out.write(content.toByteArray(Charsets.UTF_8))
-        } ?: throw IllegalStateException("MediaStore open failed")
-        values.clear()
-        values.put(MediaStore.Downloads.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
     }
 
     private fun postFinalNotification(text: String, icon: Int) {

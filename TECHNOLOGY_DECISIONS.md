@@ -430,3 +430,40 @@ Milestone 5, not before.
   field-proven for single spoken sentences (voice translator),
   NOT yet for film-length batch translation; the first run's
   model load takes minutes. Both are his to judge in the field.
+
+---
+
+**TD-002 reaffirmed (owner decision, 2026-11-27):** A hybrid online/offline mode was proposed by the owner himself and considered with its trade-offs on the record — cloud transcription would be far faster (a 2.5 h film in minutes on a large model) but costs a provider account and per-minute fees, sends the film audio off the device, and gives the project's offline users nothing. The owner declined: **«لا، يبقى دون اتصال فقط»** — the app stays offline-only; the INTERNET permission is never added. Do not re-propose an online mode without his new order.
+
+## TD-011 — Final transcription revision (0.7.0, owner's orders, 2026-11-27)
+
+The owner declared this the LAST transcription edit and named its
+contents himself:
+
+- **Auto-save removed.** The 0.5.4 behaviour (SRT + TXT written to
+  Downloads the moment a job completes) is deleted from the
+  transcription pipeline at his order — «الحفظ اليدوي أفضل». Saving
+  happens only from the Done screen's export buttons, when he
+  presses them. (Translation's own save behaviour is untouched —
+  his order named transcription.)
+- **Speech-only decoding.** The fixed-window decode is replaced by
+  a two-pass pipeline: a silero VAD pass over the whole file finds
+  the speech spans; `SpeechChunks` (pure, unit-tested) plans decode
+  chunks from those spans alone (merge gap 1.5 s, cap 25 s, minimum
+  0.35 s of speech); Whisper decodes only the chunks. Non-speech —
+  music, noise, effects — never reaches the decoder, so it cannot
+  invent words for it. A decoded segment holding no letter or digit,
+  or wrapped whole in brackets (a sound annotation), is dropped by
+  `SpeechTextFilter`. The TD-008 rule survives: a VAD failure falls
+  back to plain windows over the whole file — speech is never lost
+  to a VAD error. `VadGate` (TD-008's per-window gate) is superseded
+  by the chunk planner and deleted with its test. Declared limit: a
+  scream that resembles a human voice can pass the VAD — the gate
+  separates voice from non-voice, not shouting from talking.
+- **Model size: small stays, by the owner's decision.** Whisper
+  medium (int8, ≈946 MB vs small's ≈375 MB) was put to him with the
+  measured trade-off — roughly half the Arabic word errors in our
+  own corpus study (WER 5.2% vs 11.9%), at ~3× the transcription
+  time and +~570 MB of app size — and he chose: «إبقاء small — نفس
+  السرعة الحالية». The accuracy gains of 0.7.0 therefore come from
+  the speech-only pipeline and the filters, not from a bigger model.

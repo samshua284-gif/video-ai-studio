@@ -11,29 +11,40 @@ import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
 import java.io.File
 import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * On-device speech recognition (Milestone 4, TD-002): Whisper-small
  * via sherpa-onnx — the exact engine, model files and call pattern
  * the owner already field-proved in his voice translator (its 1.13
  * ear). Fully offline; the manifest declares no INTERNET permission.
+ * The model size stays small by the owner's explicit decision
+ * (0.7.0): he chose the current speed over the medium model's
+ * accuracy when the trade-off was put to him with numbers.
  *
  * The build fetches the AAR and the model into the APK assets (see
  * app/build.gradle.kts, fetchAsrDeps, SHA-256 pinned); here they are
  * materialized once into internal storage with exact-size checks,
  * because sherpa opens real file paths.
  *
- * sherpa's Whisper accepts at most ~29.5 s per stream, so the audio
- * is decoded in consecutive 29 s windows. Each window becomes one
- * [AsrSegment] stamped with its real position. Two gates keep the
- * decoder off non-speech (0.5.1, TD-008): silent windows (RMS below
- * the floor) are skipped outright, and the rest pass a silero VAD —
- * a window holding under a second of voice (music-only, action,
- * ambience) is skipped too. Whisper invents text on non-speech, so
- * the gates are an honesty lever as much as a speed lever. A VAD
- * failure never costs speech: on any VAD error the window is
- * decoded anyway.
+ * Pipeline (0.7.0, the owner's final transcription revision):
+ *  1. A silero VAD pass over the whole file finds WHERE the speech
+ *     is — the absolute spans of voice, nothing else.
+ *  2. [SpeechChunks] plans decode units out of those spans alone.
+ *  3. Whisper decodes ONLY the speech chunks. Non-speech — music,
+ *     noise, effects, silence — never reaches the decoder, so it
+ *     cannot invent words for it (the owner's explicit ask: no
+ *     transcribing screams and outside sounds, only spoken words on
+ *     their true timing). Each chunk's segment carries its measured
+ *     spans, and the segmenter downstream places the cues on them.
+ *  4. [SpeechTextFilter] drops any decoded segment that cannot be
+ *     spoken words (pure symbols, a bracketed sound annotation).
+ *
+ * The standing honesty rule survives: a VAD failure never costs
+ * speech — if the VAD pass itself throws, the plan falls back to
+ * plain windows over the whole file ([SpeechChunks.fallback]).
+ * Honest limit, stated to the owner: a scream that sounds like a
+ * human voice can pass the VAD gate — the gate separates voice
+ * from non-voice, not shouting from talking.
  */
 class AsrEngine(private val context: Context) {
 
@@ -91,7 +102,9 @@ class AsrEngine(private val context: Context) {
                 minSilenceDuration = 0.5f,
                 minSpeechDuration = 0.25f,
                 windowSize = VAD_WINDOW,
-                maxSpeechDuration = 30f
+                // 0.7.0: a VAD segment never exceeds one decode
+                // chunk, so spans arrive pre-capped for the planner.
+                maxSpeechDuration = SpeechChunks.MAX_CHUNK_SEC.toFloat()
             ),
             sampleRate = 16000,
             numThreads = 1,
@@ -104,15 +117,8 @@ class AsrEngine(private val context: Context) {
         return v
     }
 
-    /**
-     * The speech spans the VAD finds in one window, as absolute
-     * seconds (0.6.5): not just how much speech, but WHERE it is —
-     * subtitle cues are placed on these spans so a cue appears
-     * with the voice and ends when the voice ends, and silence
-     * stays empty. Segment starts are sample indices relative to
-     * this window (the Vad is reset after every window).
-     */
-    private fun speechSpans(v: Vad, samples: FloatArray, windowStartSec: Double): List<Pair<Double, Double>> {
+    /** Feed one block of samples to the VAD in its own window size. */
+    private fun feedVad(v: Vad, samples: FloatArray) {
         var off = 0
         while (off < samples.size) {
             val n = min(VAD_WINDOW, samples.size - off)
@@ -125,16 +131,45 @@ class AsrEngine(private val context: Context) {
             }
             off += n
         }
-        v.flush()
-        val spans = mutableListOf<Pair<Double, Double>>()
+    }
+
+    /** Drain the segments the VAD has completed into [out], as
+     *  absolute seconds. The VAD is never reset during a whole-file
+     *  pass, so segment starts are stream-absolute. */
+    private fun drainVad(v: Vad, out: MutableList<Pair<Double, Double>>) {
         while (!v.empty()) {
             val seg = v.front()
-            val s = windowStartSec + seg.start / 16000.0
+            val s = seg.start / 16000.0
             val e = s + seg.samples.size / 16000.0
-            if (e > s) spans += s to e
+            if (e > s) out += s to e
             v.pop()
         }
+    }
+
+    /**
+     * Pass 1 (0.7.0): the speech spans of the whole file. The audio
+     * streams through the VAD in 30 s blocks — a long film's WAV is
+     * never held in memory at once.
+     */
+    private fun allSpeechSpans(
+        wav: File,
+        info: WaveIo.Info,
+        isCancelled: () -> Boolean
+    ): List<Pair<Double, Double>> {
+        val v = vadFor()
         v.reset()
+        val spans = mutableListOf<Pair<Double, Double>>()
+        var off = 0L
+        while (off < info.totalSamples) {
+            if (isCancelled()) break
+            val n = min(BLOCK_SAMPLES.toLong(), info.totalSamples - off).toInt()
+            val samples = WaveIo.readSamples(wav, info, off, n)
+            feedVad(v, samples)
+            drainVad(v, spans)
+            off += n
+        }
+        v.flush()
+        drainVad(v, spans)
         return spans
     }
 
@@ -184,7 +219,9 @@ class AsrEngine(private val context: Context) {
     /**
      * Transcribe a 16 kHz mono WAV (MediaCommands.extractWav16k).
      * [language] is a Whisper code ("ar", "en", "hi", "ur") or ""
-     * for automatic detection. Progress is reported per window.
+     * for automatic detection. Progress is reported per decoded
+     * speech chunk (0.7.0: chunks, not fixed windows — a file that
+     * is mostly silence has few chunks and finishes fast).
      */
     fun transcribe(
         wav: File,
@@ -197,45 +234,44 @@ class AsrEngine(private val context: Context) {
             "expected a 16 kHz mono WAV, got ${info.sampleRate} Hz / ${info.channels} ch"
         }
         val rec = recognizerFor(language)
-        val chunk = CHUNK_SAMPLES
-        val totalChunks = ((info.totalSamples + chunk - 1) / chunk).toInt()
+        val totalSec = info.totalSamples / 16000.0
+        // Pass 1: where is the speech? A VAD failure falls back to
+        // plain windows over everything — speech is never lost to it.
+        val spans = try {
+            allSpeechSpans(wav, info, isCancelled)
+        } catch (e: Exception) {
+            null
+        }
+        if (isCancelled()) return emptyList()
+        val chunks = if (spans != null) {
+            SpeechChunks.build(spans)
+        } else {
+            SpeechChunks.fallback(totalSec)
+        }
+        // Pass 2: decode speech chunks only.
         val segments = mutableListOf<AsrSegment>()
-        var off = 0L
         var done = 0
-        while (off < info.totalSamples) {
+        for (chunk in chunks) {
             if (isCancelled()) break
-            val n = min(chunk.toLong(), info.totalSamples - off).toInt()
-            val samples = WaveIo.readSamples(wav, info, off, n)
-            val startSec = off / 16000.0
-            val endSec = (off + n) / 16000.0
-            if (rms(samples) >= SILENCE_RMS) {
-                // VAD gate (0.5.1): skip windows without real speech.
-                // A VAD error decodes anyway — never lose speech to
-                // it. The spans also ride into the segment (0.6.5)
-                // so cues can sit on the voice itself.
-                var spans: List<Pair<Double, Double>> = emptyList()
-                val decode = try {
-                    spans = speechSpans(vadFor(), samples, startSec)
-                    VadGate.shouldDecode(spans.sumOf { it.second - it.first })
-                } catch (e: Exception) {
-                    spans = emptyList()
-                    true
-                }
-                if (decode) {
-                    val stream = rec.createStream()
-                    try {
-                        stream.acceptWaveform(samples, 16000)
-                        rec.decode(stream)
-                        val text = rec.getResult(stream).text.trim()
-                        if (text.isNotEmpty()) segments += AsrSegment(startSec, endSec, text, spans)
-                    } finally {
-                        try { stream.release() } catch (e: Exception) { }
+            val startSample = (chunk.startSec * 16000).toLong()
+            val endSample = min(info.totalSamples, (chunk.endSec * 16000).toLong())
+            val n = (endSample - startSample).toInt()
+            if (n > 0) {
+                val samples = WaveIo.readSamples(wav, info, startSample, n)
+                val stream = rec.createStream()
+                try {
+                    stream.acceptWaveform(samples, 16000)
+                    rec.decode(stream)
+                    val text = rec.getResult(stream).text.trim()
+                    if (SpeechTextFilter.keep(text)) {
+                        segments += AsrSegment(chunk.startSec, chunk.endSec, text, chunk.spans)
                     }
+                } finally {
+                    try { stream.release() } catch (e: Exception) { }
                 }
             }
-            off += n
             done++
-            onProgress(done, totalChunks)
+            onProgress(done, chunks.size)
         }
         return segments
     }
@@ -248,20 +284,9 @@ class AsrEngine(private val context: Context) {
         vad = null
     }
 
-    private fun rms(samples: FloatArray): Double {
-        if (samples.isEmpty()) return 0.0
-        var sum = 0.0
-        for (s in samples) sum += (s * s).toDouble()
-        return sqrt(sum / samples.size)
-    }
-
     companion object {
-        /** sherpa Whisper ceiling is ~29.5 s/stream; 29 s windows
-         *  mean ~14% fewer encoder passes than the 0.5.0 25 s cut. */
-        const val CHUNK_SAMPLES = 29 * 16000
-
-        /** Below this RMS a window counts as silence and is skipped. */
-        const val SILENCE_RMS = 0.004
+        /** VAD feeding block: 30 s of samples per file read. */
+        const val BLOCK_SAMPLES = 30 * 16000
 
         /** silero_vad.onnx, exact size of the pinned release asset. */
         const val VAD_SIZE = 643_854L

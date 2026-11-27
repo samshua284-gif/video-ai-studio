@@ -410,14 +410,6 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         onClick = { export(base + "_subtitles.srt", SubtitleFormat.buildSrt(j.segments)) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text(stringResource(R.string.m4_export_srt)) }
-                    if (j.autoSaved) {
-                        Text(
-                            stringResource(R.string.m4_autosave_note),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                    }
                 }
             }
             is TranscribeJobState.Failed -> {
