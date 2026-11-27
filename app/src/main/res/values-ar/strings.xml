@@ -2,6 +2,11 @@
 <resources>
     <string name="app_name">استوديو الفيديو بالذكاء الاصطناعي</string>
     <string name="dashboard_tagline">من أول قصّ إلى المشاركة النهائية، بحرية تامة.</string>
+    <string name="nav_home">الرئيسية</string>
+    <string name="home_hero_a">استوديو الفيديو</string>
+    <string name="home_hero_b">الاحترافي</string>
+    <string name="home_hero_sub">جميع أدوات الفيديو في مكان واحد</string>
+    <string name="home_tools_section">أدوات الفيديو</string>
     <string name="import_video">استيراد فيديو</string>
     <string name="import_hint">اختر فيديو لفحص بياناته الحقيقية ومعاينته. لا يُعدَّل الملف الأصلي أبدًا.</string>
     <string name="tool_arrives">تُبنى هذه الأداة في المرحلة %1$d.</string>

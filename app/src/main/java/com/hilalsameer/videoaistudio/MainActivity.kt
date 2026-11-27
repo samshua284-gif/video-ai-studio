@@ -8,16 +8,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -26,6 +33,26 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Hd
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,7 +65,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +92,8 @@ import com.hilalsameer.videoaistudio.ui.MediaToolScreen
 import com.hilalsameer.videoaistudio.ui.ToolKind
 import com.hilalsameer.videoaistudio.ui.TranscribeToolScreen
 import com.hilalsameer.videoaistudio.ui.TranslateToolScreen
+import com.hilalsameer.videoaistudio.ui.GoldButton
+import com.hilalsameer.videoaistudio.ui.StudioTokens
 import com.hilalsameer.videoaistudio.ui.VideoAIStudioTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -170,6 +203,36 @@ fun StudioApp() {
     }
 }
 
+/**
+ * Per-tool icon and tint for the dashboard grid (0.8.0, TD-014):
+ * drawn vector icons in the template's per-tool colours — no
+ * emoji, whose rendering changes from phone to phone.
+ * Index-aligned with TOOLS.
+ */
+val TOOL_ICONS: List<ImageVector> = listOf(
+    Icons.Filled.AutoAwesome,
+    Icons.Filled.Hd,
+    Icons.Filled.GraphicEq,
+    Icons.Filled.MusicNote,
+    Icons.Filled.Mic,
+    Icons.Filled.Translate,
+    Icons.Filled.Subtitles,
+    Icons.Filled.Compress,
+    Icons.Filled.ContentCut,
+    Icons.Filled.VolumeUp,
+    Icons.Filled.Layers,
+    Icons.Filled.Assignment,
+    Icons.Filled.History,
+    Icons.Filled.Settings
+)
+
+val TOOL_TINTS: List<Color> = listOf(
+    Color(0xFF4FC3F7), Color(0xFFFFC52F), Color(0xFF3DDC84), Color(0xFFB388FF),
+    Color(0xFFFFB74D), Color(0xFF64B5F6), Color(0xFFBA68C8), Color(0xFF3DDC84),
+    Color(0xFFEF5350), Color(0xFF42A5F5), Color(0xFF3DDC84), Color(0xFF4DB6AC),
+    Color(0xFFB0A58F), Color(0xFFAAAAAA)
+)
+
 @Composable
 fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) -> Unit) {
     val context = LocalContext.current
@@ -210,81 +273,192 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(20.dp)) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = stringResource(R.string.dashboard_tagline),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                picker.launch(
-                    androidx.activity.result.PickVisualMediaRequest(
-                        ActivityResultContracts.PickVisualMedia.VideoOnly
-                    )
-                )
-            },
-            modifier = Modifier.fillMaxWidth().height(64.dp)
-        ) {
-            Text(
-                stringResource(R.string.import_video),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Text(
-            text = stringResource(R.string.import_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-        if (inspecting) {
-            Row(modifier = Modifier.padding(top = 12.dp)) {
-                CircularProgressIndicator()
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            Column(modifier = Modifier.background(StudioTokens.Surface)) {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(StudioTokens.CardBorder))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BottomNavItem(Icons.Filled.Home, stringResource(R.string.nav_home), true) {}
+                    BottomNavItem(
+                        Icons.Filled.Settings, stringResource(R.string.tool_settings), false
+                    ) { onTool(13) }
+                }
             }
         }
-        if (failed) {
-            Text(
-                text = stringResource(R.string.inspect_failed),
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(top = 12.dp)
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
+    ) { pad ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(pad).padding(horizontal = 20.dp)
         ) {
-            items(TOOLS.indices.toList()) { idx ->
-                val tool = TOOLS[idx]
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { onTool(idx) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Movie, contentDescription = null,
+                    tint = StudioTokens.Gold, modifier = Modifier.size(30.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = StudioTokens.Gold
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(Color(0xFF211507), StudioTokens.Background, Color(0xFF35230A))
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    .border(1.dp, StudioTokens.GoldDark, RoundedCornerShape(24.dp))
+                    .padding(18.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.PlayCircle, contentDescription = null,
+                        tint = StudioTokens.Gold, modifier = Modifier.size(54.dp)
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Column {
                         Text(
-                            text = stringResource(tool.titleRes),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                            text = stringResource(R.string.home_hero_a),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "M${tool.milestone}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.padding(top = 4.dp)
+                            text = stringResource(R.string.home_hero_b),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = StudioTokens.Gold
+                        )
+                        Text(
+                            text = stringResource(R.string.home_hero_sub),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
                         )
                     }
                 }
             }
+            Spacer(Modifier.height(18.dp))
+            GoldButton(
+                text = stringResource(R.string.import_video),
+                onClick = {
+                    picker.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.VideoOnly
+                        )
+                    )
+                },
+                modifier = Modifier.height(64.dp)
+            )
+            Text(
+                text = stringResource(R.string.import_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+            if (inspecting) {
+                Row(modifier = Modifier.padding(top = 12.dp)) {
+                    CircularProgressIndicator()
+                }
+            }
+            if (failed) {
+                Text(
+                    text = stringResource(R.string.inspect_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(1.dp).background(StudioTokens.GoldDark))
+                Text(
+                    text = "  " + stringResource(R.string.home_tools_section) + "  ",
+                    color = StudioTokens.Gold,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Box(Modifier.weight(1f).height(1.dp).background(StudioTokens.GoldDark))
+            }
+            Spacer(Modifier.height(12.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(TOOLS.indices.toList()) { idx ->
+                    val tool = TOOLS[idx]
+                    val tint = TOOL_TINTS[idx]
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { onTool(idx) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        border = BorderStroke(1.dp, StudioTokens.CardBorder)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Box(
+                                modifier = Modifier.size(42.dp).background(
+                                    tint.copy(alpha = 0.15f), RoundedCornerShape(10.dp)
+                                ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    TOOL_ICONS[idx], contentDescription = null,
+                                    tint = tint, modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = stringResource(tool.titleRes),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "M${tool.milestone}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
         }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            icon, contentDescription = null,
+            tint = if (selected) StudioTokens.Gold else StudioTokens.TextSecondary,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(
+            text = label,
+            color = if (selected) StudioTokens.Gold else StudioTokens.TextSecondary,
+            style = MaterialTheme.typography.labelSmall
+        )
     }
 }
 

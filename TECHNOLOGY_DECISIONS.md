@@ -526,3 +526,33 @@ Verified before the push: the pure region/gain logic and a
 synthetic-WAV pass (gasp window, mid pause, two speech windows)
 run in the host harness against the shipped Kotlin; the Compose
 wiring is arbitrated by CI like every UI change before it.
+
+## TD-014 — The dark-and-gold skin (0.8.0, 2026-11-27)
+
+The owner brought a ChatGPT-made template (dark + gold home,
+hero banner, two-column tool grid, bottom bar) and code for a
+central design system, and ordered it adopted with three
+decisions of his own: the crown image and the word "Pro" are
+deleted (a free app carries no paid-tier branding); the bottom
+bar holds only destinations that exist (Home, and Settings —
+which routes exactly where its grid card routes today); and
+the decorative noise-level slider shown in the mockup is NOT
+adopted (the owner's own 0.4.1 decision removed levels; a
+slider that does nothing would violate Rule 1).
+
+Adaptation, not transplantation — the received code was an
+uncompiled draft for a foreign package with hardcoded Arabic
+strings, forced RTL and emoji icons. What shipped instead:
+StudioTokens in Theme.kt is the single design source (the whole
+app, transcription and translation included, re-skins from the
+theme alone — their files were not touched); the dashboard is
+rebuilt to the template (hero, gold import button at its
+owner-mandated 64 dp, section rule, icon-chipped grid, bottom
+bar) on the existing navigation and import machinery, with
+drawn vector icons (material-icons-extended, BOM-managed) in
+per-tool colours instead of emoji; shared GoldButton and
+ToolPanel components carry the skin into tool screens (the
+audio and media run buttons use GoldButton explicitly).
+Strings stay bilingual at parity (161 keys); direction follows
+the locale, never forced. No engine, pipeline or behaviour
+changed anywhere.

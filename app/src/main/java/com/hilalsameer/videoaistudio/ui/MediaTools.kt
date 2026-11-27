@@ -332,9 +332,7 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         Spacer(Modifier.height(20.dp))
         when (val j = job) {
             is JobUi.Idle, is JobUi.Done, is JobUi.Failed, is JobUi.Cancelled -> {
-                Button(onClick = { startJob() }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(runRes))
-                }
+                GoldButton(text = stringResource(runRes), onClick = { startJob() })
             }
             is JobUi.Preparing -> {
                 Row { CircularProgressIndicator(); Text("  " + stringResource(R.string.m2_preparing)) }

@@ -424,9 +424,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         Spacer(Modifier.height(20.dp))
         when (val j = job) {
             is AudioJob.Idle, is AudioJob.Done, is AudioJob.Failed, is AudioJob.Cancelled -> {
-                Button(onClick = { startJob() }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(runRes))
-                }
+                GoldButton(text = stringResource(runRes), onClick = { startJob() })
             }
             is AudioJob.Preparing -> {
                 Row { CircularProgressIndicator(); Text("  " + stringResource(R.string.m2_preparing)) }

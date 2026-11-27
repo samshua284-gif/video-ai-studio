@@ -2,6 +2,11 @@
 <resources>
     <string name="app_name">Video AI Studio</string>
     <string name="dashboard_tagline">From cut to final share, crafted freely.</string>
+    <string name="nav_home">Home</string>
+    <string name="home_hero_a">Video AI</string>
+    <string name="home_hero_b">Studio</string>
+    <string name="home_hero_sub">All your video tools in one place</string>
+    <string name="home_tools_section">Video Tools</string>
     <string name="import_video">Import Video</string>
     <string name="import_hint">Pick a video to inspect its real metadata and preview it. The original file is never modified.</string>
     <string name="tool_arrives">This tool is implemented in Milestone %1$d.</string>
