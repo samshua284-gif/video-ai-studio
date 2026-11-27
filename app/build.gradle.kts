@@ -51,6 +51,14 @@ android {
             assets.srcDir("build/mtdeps")
         }
     }
+    androidResources {
+        // ML model files are stored uncompressed: quantized ONNX is
+        // high-entropy (deflate gains almost nothing), and trying to
+        // compress ~1.3 GB of models blew the asset worker's heap
+        // in CI (0.6.0, build #43). Stored assets are also read
+        // directly by the engines with no decompression step.
+        noCompress += "onnx"
+    }
     packaging {
         jniLibs {
             // FFmpegKit and ONNX Runtime both bundle libc++_shared.so.
