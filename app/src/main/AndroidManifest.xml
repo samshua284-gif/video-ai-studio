@@ -31,6 +31,10 @@
             android:name=".TranscribeService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".TranslateService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

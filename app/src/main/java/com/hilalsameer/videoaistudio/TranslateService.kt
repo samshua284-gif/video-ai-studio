@@ -1,0 +1,385 @@
+package com.hilalsameer.videoaistudio
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Environment
+import android.os.IBinder
+import android.os.PowerManager
+import android.provider.MediaStore
+import androidx.core.app.NotificationCompat
+import com.hilalsameer.videoaistudio.media.AsrSegment
+import com.hilalsameer.videoaistudio.media.CorrectionMemory
+import com.hilalsameer.videoaistudio.media.MtEngine
+import com.hilalsameer.videoaistudio.media.MtLanguages
+import com.hilalsameer.videoaistudio.media.SrtParser
+import com.hilalsameer.videoaistudio.media.SubtitleFormat
+import com.hilalsameer.videoaistudio.media.TranslateFix
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Observable state of a translation job (Milestone 5). */
+sealed interface TranslateJobState {
+    data object Idle : TranslateJobState
+    data object LoadingModel : TranslateJobState
+    data class Translating(val done: Int, val total: Int) : TranslateJobState
+    data class Done(
+        val segments: List<AsrSegment>,
+        val source: List<AsrSegment>,
+        val numberFlags: List<Int>,
+        val inputName: String,
+        val autoSaved: Boolean = false
+    ) : TranslateJobState
+
+    data class Failed(val message: String) : TranslateJobState
+    data object Cancelled : TranslateJobState
+    data object Cancelling : TranslateJobState
+}
+
+/**
+ * Foreground service running a whole-file translation (Milestone
+ * 5) with the same survival contract as transcription (TD-008):
+ * the job lives here — not in the screen — under a partial wake
+ * lock renewed per segment, with a progress notification and an
+ * honest cancel. The screen only starts the job and observes it.
+ *
+ * Segments are translated one by one and keep their source
+ * timestamps untouched, so the translated SRT is synchronised by
+ * construction. Per segment, in order: the owner's correction
+ * memory (TD-006 Layer 3) serves his own past corrections
+ * verbatim; the NLLB engine translates the rest; TD-006 Layer 1
+ * then verifies the segment's numbers survived — a segment whose
+ * numbers did not is FLAGGED in the result, never silently
+ * rewritten. On completion the translated SRT + TXT are written
+ * to Downloads automatically (0.5.4's rule, carried over).
+ */
+class TranslateService : Service() {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var job: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private val cancelFlag = AtomicBoolean(false)
+    private var mt: MtEngine? = null
+    private var lastNotifMs = 0L
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.tool_translate),
+                NotificationManager.IMPORTANCE_LOW
+            )
+        )
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_CANCEL -> {
+                cancelFlag.set(true)
+                if (state.value is TranslateJobState.Translating ||
+                    state.value is TranslateJobState.LoadingModel
+                ) {
+                    state.value = TranslateJobState.Cancelling
+                    updateNotificationForce(getString(R.string.m4_cancelling))
+                }
+            }
+            ACTION_START -> {
+                if (job?.isActive == true) return START_NOT_STICKY
+                val srt = intent.getStringExtra(EXTRA_SRT) ?: return START_NOT_STICKY
+                val name = intent.getStringExtra(EXTRA_NAME) ?: "video"
+                val title = intent.getStringExtra(EXTRA_TITLE)
+                val src = intent.getStringExtra(EXTRA_SRC) ?: "en"
+                val tgt = intent.getStringExtra(EXTRA_TGT) ?: "ar"
+                cancelFlag.set(false)
+                startForeground(
+                    NOTIF_ID,
+                    buildNotification(getString(R.string.m5_notif_running), null, null)
+                )
+                acquireWakeLock()
+                job = scope.launch { runPipeline(srt, name, title, src, tgt) }
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    private suspend fun runPipeline(
+        srt: String, name: String, title: String?, src: String, tgt: String
+    ) {
+        try {
+            val source = SrtParser.parse(srt)
+            if (source.isEmpty()) {
+                finish(TranslateJobState.Failed(getString(R.string.m5_err_empty)))
+                return
+            }
+            val srcF = MtLanguages.flores(src)
+            val tgtF = MtLanguages.flores(tgt)
+            if (srcF == null || tgtF == null) {
+                finish(TranslateJobState.Failed(getString(R.string.m5_err_language)))
+                return
+            }
+            state.value = TranslateJobState.LoadingModel
+            updateNotification(getString(R.string.m5_notif_loading), null, null)
+            val engine = mt ?: MtEngine(applicationContext).also { mt = it }
+            engine.onLoadProgress = { file ->
+                updateNotification(
+                    getString(R.string.m5_notif_loading) + " — " + file.substringAfterLast('/'),
+                    null, null
+                )
+            }
+            if (!engine.ensureLoaded()) {
+                finish(
+                    TranslateJobState.Failed(
+                        getString(R.string.m5_err_model) + ": " + (engine.lastError ?: "")
+                    )
+                )
+                return
+            }
+            if (cancelFlag.get()) {
+                finish(TranslateJobState.Cancelled)
+                return
+            }
+            // TD-006 Layer 3: the owner's own corrections, loaded once.
+            val memory: Map<String, String> =
+                getSharedPreferences(MEMORY_PREFS, Context.MODE_PRIVATE).all
+                    .mapNotNull { (k, v) -> (v as? String)?.let { k to it } }
+                    .toMap()
+            val out = ArrayList<AsrSegment>(source.size)
+            val flags = ArrayList<Int>()
+            for ((i, seg) in source.withIndex()) {
+                if (cancelFlag.get()) {
+                    finish(TranslateJobState.Cancelled)
+                    return
+                }
+                val fromMemory = CorrectionMemory.lookup(seg.text, memory)
+                val translated = fromMemory ?: engine.translate(seg.text, srcF, tgtF)
+                if (!TranslateFix.numbersPreserved(seg.text, translated)) {
+                    flags.add(i)
+                }
+                out.add(AsrSegment(seg.startSec, seg.endSec, translated))
+                state.value = TranslateJobState.Translating(i + 1, source.size)
+                acquireWakeLock()
+                updateNotification(
+                    getString(R.string.m5_translating, i + 1, source.size),
+                    i + 1, source.size
+                )
+            }
+            if (cancelFlag.get()) {
+                finish(TranslateJobState.Cancelled)
+            } else {
+                val saved = autoSave(name, title, tgt, out)
+                finish(TranslateJobState.Done(out, source, flags, name, saved))
+            }
+        } catch (e: Exception) {
+            if (cancelFlag.get()) {
+                finish(TranslateJobState.Cancelled)
+            } else {
+                finish(TranslateJobState.Failed(e.message ?: e.javaClass.simpleName))
+            }
+        }
+    }
+
+    private fun finish(terminal: TranslateJobState) {
+        state.value = terminal
+        releaseWakeLock()
+        when (terminal) {
+            is TranslateJobState.Done -> postFinalNotification(
+                getString(
+                    if (terminal.autoSaved) R.string.m5_notif_done_saved
+                    else R.string.m5_notif_done
+                ),
+                android.R.drawable.stat_sys_download_done
+            )
+            is TranslateJobState.Failed -> postFinalNotification(
+                getString(R.string.m5_notif_failed), android.R.drawable.stat_notify_error
+            )
+            else -> { }
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun buildNotification(text: String, progress: Int?, max: Int?): Notification {
+        val openIntent = PendingIntent.getActivity(
+            this, 10,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val cancelIntent = PendingIntent.getService(
+            this, 11,
+            Intent(this, TranslateService::class.java).setAction(ACTION_CANCEL),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val b = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(getString(R.string.tool_translate))
+            .setContentText(text)
+            .setContentIntent(openIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.m2_cancel), cancelIntent
+            )
+        if (progress != null && max != null && max > 0) {
+            b.setProgress(max, progress, false)
+        }
+        return b.build()
+    }
+
+    private fun updateNotification(text: String, progress: Int?, max: Int?) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotifMs < 1000L) return
+        lastNotifMs = now
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIF_ID, buildNotification(text, progress, max))
+    }
+
+    private fun updateNotificationForce(text: String) {
+        lastNotifMs = System.currentTimeMillis()
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIF_ID, buildNotification(text, null, null))
+    }
+
+    /** Translated SRT + TXT into public Downloads (0.5.4's rule). */
+    private fun autoSave(
+        name: String, title: String?, tgt: String, segments: List<AsrSegment>
+    ): Boolean {
+        if (segments.isEmpty()) return false
+        if (Build.VERSION.SDK_INT < 29) return false
+        val base = SubtitleFormat.exportBaseName(name, title)
+        return try {
+            writeDownload(
+                base + "_" + tgt + "_subtitles.srt", "application/x-subrip",
+                SubtitleFormat.buildSrt(segments)
+            )
+            writeDownload(
+                base + "_" + tgt + "_transcript.txt", "text/plain",
+                SubtitleFormat.buildTxt(segments)
+            )
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun writeDownload(displayName: String, mime: String, content: String) {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
+            put(MediaStore.Downloads.MIME_TYPE, mime)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("MediaStore insert failed")
+        resolver.openOutputStream(uri)?.use { out ->
+            out.write(content.toByteArray(Charsets.UTF_8))
+        } ?: throw IllegalStateException("MediaStore open failed")
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+    }
+
+    private fun postFinalNotification(text: String, icon: Int) {
+        val openIntent = PendingIntent.getActivity(
+            this, 12,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val n = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(icon)
+            .setContentTitle(getString(R.string.tool_translate))
+            .setContentText(text)
+            .setContentIntent(openIntent)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(DONE_NOTIF_ID, n)
+    }
+
+    /** Same renewal discipline as transcription (0.5.7): acquiring
+     *  again on the same lock pushes its deadline forward. */
+    private fun acquireWakeLock() {
+        val wl = wakeLock ?: run {
+            val pm = getSystemService(PowerManager::class.java)
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "videoaistudio:mt").also {
+                it.setReferenceCounted(false)
+                wakeLock = it
+            }
+        }
+        wl.acquire(WAKELOCK_TIMEOUT_MS)
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (e: Exception) { }
+        wakeLock = null
+    }
+
+    override fun onDestroy() {
+        cancelFlag.set(true)
+        job?.cancel()
+        releaseWakeLock()
+        try { mt?.release() } catch (e: Exception) { }
+        super.onDestroy()
+    }
+
+    companion object {
+        private const val CHANNEL_ID = "translate"
+        private const val NOTIF_ID = 51
+        private const val DONE_NOTIF_ID = 52
+        private const val WAKELOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
+        const val MEMORY_PREFS = "translation_memory"
+
+        private const val ACTION_START = "com.hilalsameer.videoaistudio.MT_START"
+        private const val ACTION_CANCEL = "com.hilalsameer.videoaistudio.MT_CANCEL"
+        private const val EXTRA_SRT = "srt"
+        private const val EXTRA_NAME = "name"
+        private const val EXTRA_TITLE = "title"
+        private const val EXTRA_SRC = "src"
+        private const val EXTRA_TGT = "tgt"
+
+        val state = MutableStateFlow<TranslateJobState>(TranslateJobState.Idle)
+
+        fun start(
+            context: Context, srt: String, name: String,
+            title: String?, src: String, tgt: String
+        ) {
+            val intent = Intent(context, TranslateService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_SRT, srt)
+                putExtra(EXTRA_NAME, name)
+                putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_SRC, src)
+                putExtra(EXTRA_TGT, tgt)
+            }
+            if (Build.VERSION.SDK_INT >= 26) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun cancel(context: Context) {
+            val intent = Intent(context, TranslateService::class.java).apply {
+                action = ACTION_CANCEL
+            }
+            context.startService(intent)
+        }
+    }
+}

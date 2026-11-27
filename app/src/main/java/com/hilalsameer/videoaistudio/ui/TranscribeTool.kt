@@ -94,7 +94,12 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         ActivityResultContracts.RequestPermission()
     ) { /* best effort: the job runs either way */ }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    // 0.6.0 (owner's order): the import choice is a video OR an
+    // audio clip in any format — the pipeline decodes the audio
+    // track either way (FFmpeg extractWav16k), so an MP3 yields
+    // its SRT/TXT exactly like a film does. OpenDocument covers
+    // both families in one picker.
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             try {
                 context.contentResolver.takePersistableUriPermission(
@@ -110,9 +115,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             }
         }
     }
-    val videoPickerRequest = androidx.activity.result.PickVisualMediaRequest(
-        ActivityResultContracts.PickVisualMedia.VideoOnly
-    )
+    val mediaTypes = arrayOf("video/*", "audio/*")
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -167,6 +170,17 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
 
+        HowToCard(
+            steps = listOf(
+                stringResource(R.string.m4_howto_1),
+                stringResource(R.string.m4_howto_2),
+                stringResource(R.string.m4_howto_3),
+                stringResource(R.string.m4_howto_4),
+                stringResource(R.string.m4_howto_5)
+            )
+        )
+        Spacer(Modifier.height(12.dp))
+
         val info = state.currentInfo
         // 0.5.3: a job outlives this screen — the foreground service
         // keeps working even when the app is closed completely. When
@@ -187,11 +201,11 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { picker.launch(videoPickerRequest) },
+                onClick = { picker.launch(mediaTypes) },
                 modifier = Modifier.fillMaxWidth().height(64.dp)
             ) {
                 Text(
-                    stringResource(R.string.import_video),
+                    stringResource(R.string.m4_import_media),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -214,7 +228,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     )
                 }
             }
-            TextButton(onClick = { picker.launch(videoPickerRequest) }) {
+            TextButton(onClick = { picker.launch(mediaTypes) }) {
                 Text(stringResource(R.string.m2_change_video))
             }
         }
@@ -257,11 +271,11 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     // result is below: re-importing the same video
                     // re-attaches everything (0.5.3).
                     Button(
-                        onClick = { picker.launch(videoPickerRequest) },
+                        onClick = { picker.launch(mediaTypes) },
                         modifier = Modifier.fillMaxWidth().height(64.dp)
                     ) {
                         Text(
-                            stringResource(R.string.import_video),
+                            stringResource(R.string.m4_import_media),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

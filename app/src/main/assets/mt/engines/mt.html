@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<script>
+  // Host page for the offline translation engine (Milestone 5).
+  // Owns the MT Web Worker and relays between the Kotlin bridge
+  // (MtBridge) and the worker, JSON strings both ways — the same
+  // protocol the owner's voice translator field-proved.
+  var worker = new Worker('mt-worker.js');
+  worker.onmessage = function (e) { MtBridge.onMessage(JSON.stringify(e.data)); };
+  worker.onerror = function (err) {
+    MtBridge.onMessage(JSON.stringify({
+      type: 'mt-error', id: 0,
+      message: String((err && err.message) || err)
+    }));
+  };
+  window.__mtPost = function (json) { worker.postMessage(JSON.parse(json)); };
+  MtBridge.onMessage(JSON.stringify({ type: 'page-ready' }));
+</script>
+</body>
+</html>

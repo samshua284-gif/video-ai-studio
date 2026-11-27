@@ -345,3 +345,88 @@ the problem; the job's host was. Decisions:
   only on the owner's phone; the service/wake-lock mechanics are
   standard Android, compile- and CI-verified here. The decisive
   test is the same film re-run with the screen off.
+- Amendment (0.5.7, same day): the one-shot 6 h wake-lock timeout
+  could lapse mid-film on jobs longer than 6 h (the owner's first
+  film crossed that line), so the lock is now renewed on every
+  transcribed part — its deadline always sits 6 h ahead of the
+  latest part, for exactly as long as the job runs.
+
+## TD-009 — SRT merge option inside Milestone 5 (decided 2026-11-27)
+
+Owner's workflow for very long films: split the film into parts,
+transcribe each part separately (shorter jobs, natural rest
+points, no single job at the mercy of one failure), then work
+with ONE subtitle file. Decision: the Milestone 5 translation
+tooling gains a **merge SRT files** option — the user picks two
+or more SRT files in order, and the tool emits a single merged
+SRT.
+
+Correctness rule (the whole point): each file's timestamps are
+offset by the **exact durations of the preceding video parts** —
+never by the preceding file's last subtitle timestamp. A part's
+last line ends before the part itself ends, so offsetting by it
+would shift every later line early and accumulate drift across
+parts. The durations come from the user (entered per part) or
+are read from the selected video files by the existing
+inspection path.
+
+The merge is language-agnostic pure timestamp arithmetic
+(offset + continuous renumbering) in the SubtitleFormat family,
+unit-tested like exportBaseName; it therefore serves both
+orders — merge-then-translate and translate-then-merge.
+
+Owner's ordering rule (2026-11-27, his words): the merge runs
+**in order, from the first file to the last file, through to
+the production stage** — files are processed strictly in the
+sequence the user picked them, offsets accumulate in that same
+sequence, and the single merged file is the production output
+that continues onward (to translation and final export). No
+reordering, no parallel shuffling: first → last → production.
+Status: recorded decision only, NOT implemented; it lands with
+Milestone 5, not before.
+
+## TD-010 — Milestone 5 implementation choices (0.6.0, 2026-11-27)
+
+- **Engine: the voice translator's proven stack, reused whole.**
+  NLLB-200-distilled-600M (quantized) under Transformers.js
+  2.17.2 / onnxruntime-web 1.14.0 in a hidden WebView, assets
+  served under a fake https host with cross-origin-isolation
+  headers (the VT serving pattern). All 13 binaries are fetched
+  at build time by fetchMtDeps, SHA-256-pinned to the VT
+  field-proven artifacts. The worker keeps VT's proven rules:
+  sentence-by-sentence only (merged chunks silently drop
+  sentences), per-unit completeness guard (retry once, then
+  source passes through visibly), greedy decoding. Cost stated
+  plainly: +~950 MB of model/engine assets in the APK.
+- **Jobs run in a foreground service** (TranslateService) with
+  TD-008's survival contract — wake lock renewed per segment,
+  progress notification, instant-visible cancel, auto-save of
+  the translated SRT + TXT to Downloads on completion.
+  Segments keep their source timestamps untouched, so the
+  translated SRT is synchronised by construction.
+- **TD-006 as implemented here:** Layer 1 = number verification
+  per segment (digit scripts normalised for the comparison);
+  a segment whose numbers did not survive is flagged by number
+  in the result — detected, never rewritten. Output digit
+  script is NOT auto-converted (a display convention, left to
+  the owner). Layer 3 = segment-level translation memory: the
+  owner's edited lines are harvested at export (only when the
+  edited text still line-aligns with the segments) and served
+  verbatim on identical future segments. Layer 2's dual-engine
+  agreement and QE scoring are NOT in this build: a second
+  engine (OPUS-MT) is another ~300 MB per pair and another
+  integration, for flag-only value; they remain recorded in
+  TD-006 for a later, separately-measured step.
+- **TD-009 merge is in:** SrtParser + SubtitleMerge (pure,
+  unit-tested), UI in the translation tool — parts added in
+  order, each with its video duration entered as mm:ss, merged
+  strictly first → last into the production source.
+- **Owner's same-day additions:** the transcription importer now
+  accepts a video OR an audio clip in any format (the FFmpeg
+  pipeline decodes either; an MP3 yields SRT/TXT like a film),
+  and both the transcription and translation tools carry a
+  «طريقة الاستخدام» (HowToCard) with numbered steps.
+- Declared limits: NLLB quality/speed on the owner's phone is
+  field-proven for single spoken sentences (voice translator),
+  NOT yet for film-length batch translation; the first run's
+  model load takes minutes. Both are his to judge in the field.
