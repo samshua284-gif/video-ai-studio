@@ -148,7 +148,7 @@ class TranscribeService : Service() {
             }
             state.value = TranscribeJobState.Transcribing(0, 0)
             val engineAsr = asr ?: AsrEngine(applicationContext).also { asr = it }
-            val segments = engineAsr.transcribe(
+            val windowSegments = engineAsr.transcribe(
                 wav, lang,
                 { done, total ->
                     state.value = TranscribeJobState.Transcribing(done, total)
@@ -159,6 +159,12 @@ class TranscribeService : Service() {
                 },
                 { cancelFlag.get() }
             )
+            // 0.6.4: Whisper's ~29 s window segments become
+            // sentence cues before anything downstream sees them
+            // (Done state, auto-save, translation source) — one
+            // giant cue per window was the owner's field report.
+            val segments = com.hilalsameer.videoaistudio.media.SubtitleSegmenter
+                .resegment(windowSegments)
             if (cancelFlag.get()) {
                 finish(TranscribeJobState.Cancelled)
             } else {
