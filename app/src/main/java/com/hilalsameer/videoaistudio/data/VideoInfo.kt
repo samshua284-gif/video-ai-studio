@@ -100,6 +100,13 @@ fun inspectVideo(context: Context, uri: Uri): VideoInfo {
     val rotation = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
     val bitrate = meta(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toIntOrNull()
     var fps = meta(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
+    // 0.6.2 root-cause fix: the embedded title must be read BEFORE
+    // release(). Since 0.5.6 it was read at the return statement —
+    // after retriever.release() — a use-after-release that throws
+    // on Samsung's implementation, so EVERY import on 0.6.0/0.6.1
+    // failed inspection and the screen silently stayed empty.
+    val title = meta(MediaMetadataRetriever.METADATA_KEY_TITLE)
+        ?.trim()?.takeIf { it.isNotBlank() }
     retriever.release()
 
     val tracks = mutableListOf<TrackInfo>()
@@ -141,7 +148,6 @@ fun inspectVideo(context: Context, uri: Uri): VideoInfo {
         width = width, height = height, rotation = rotation, fps = fps,
         bitrate = bitrate, videoMime = videoMime, audioMime = audioMime,
         tracks = tracks,
-        title = meta(MediaMetadataRetriever.METADATA_KEY_TITLE)
-            ?.trim()?.takeIf { it.isNotBlank() }
+        title = title
     )
 }

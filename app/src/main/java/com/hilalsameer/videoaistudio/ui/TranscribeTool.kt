@@ -132,6 +132,10 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     // directly (OpenDocument filtered to audio/*). The single
     // combined picker of 0.6.0 landed in the file manager and
     // imported nothing on his phone.
+    // A failed inspection must SAY so (0.6.2): the 0.6.0/0.6.1
+    // silence — pick a file, screen stays empty — is what the
+    // owner reported twice. Never swallow an import failure again.
+    var importError by remember { mutableStateOf(false) }
     fun onPicked(uri: Uri?) {
         if (uri != null) {
             try {
@@ -144,7 +148,12 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 val info = withContext(Dispatchers.IO) {
                     try { inspectVideo(context, uri) } catch (e: Exception) { null }
                 }
-                if (info != null) state.currentInfo = info
+                if (info != null) {
+                    state.currentInfo = info
+                    importError = false
+                } else {
+                    importError = true
+                }
             }
         }
     }
@@ -236,6 +245,14 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             job is TranscribeJobState.Done ||
             job is TranscribeJobState.Failed
         if ((state.currentUri == null || info == null) && !jobOwnsScreen) {
+            if (importError) {
+                Text(
+                    text = stringResource(R.string.m_import_failed),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error
+                )
+                Spacer(Modifier.height(12.dp))
+            }
             // Owner's order (0.6.1): no explanatory text here — the
             // two import boxes side by side speak for themselves,
             // and «طريقة الاستخدام» above stays.
