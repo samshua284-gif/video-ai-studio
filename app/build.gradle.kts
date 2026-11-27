@@ -199,7 +199,7 @@ val fetchMtDeps by tasks.registering {
             Triple("$ort/ort-wasm-threaded.worker.js", "mt/engines/ort-wasm-threaded.worker.js",
                 "0cf0d14ffa4dcbece952a66ee317ff656915784aa5cb6b86e0c0beb2d1d8a5e9"),
             Triple("$nllb/config.json", "mt/engines/models/nllb-200-distilled-600M/config.json",
-                "52f035acb54ac80e5ef7fe78d6967f078d1a92a2c8168d8ff4a20"),
+                "52f035acb54ac80e5ef7fe78d6967f8ddf8e879f078d1a92a2c8168dff4a20"),
             Triple("$nllb/generation_config.json", "mt/engines/models/nllb-200-distilled-600M/generation_config.json",
                 "1ce846259ae04c572ae1863e358534bbc376ff3d3f100b1494feda6200b51de8"),
             Triple("$nllb/tokenizer.json", "mt/engines/models/nllb-200-distilled-600M/tokenizer.json",
