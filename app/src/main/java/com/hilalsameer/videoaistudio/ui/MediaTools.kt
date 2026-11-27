@@ -47,7 +47,7 @@ import com.hilalsameer.videoaistudio.media.MediaEngine
 import com.hilalsameer.videoaistudio.media.ValidationReport
 import com.hilalsameer.videoaistudio.media.exportsDir
 import com.hilalsameer.videoaistudio.media.prepareInputFile
-import com.hilalsameer.videoaistudio.media.saveToGallery
+import com.hilalsameer.videoaistudio.media.saveToDownloads
 import com.hilalsameer.videoaistudio.media.validateExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,7 +122,7 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         ActivityResultContracts.PickVisualMedia.VideoOnly
     )
 
-    var savedToGallery by remember { mutableStateOf(false) }
+    var savedToDownloads by remember { mutableStateOf(false) }
     // Before/after comparison state (TD-005: the shared compare
     // component serves every tool, this screen included).
     var lastInput by remember { mutableStateOf<File?>(null) }
@@ -144,18 +144,18 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         }
     }
 
-    /** Save = publish into the Gallery; document picker is the fallback. */
+    /** Save = publish into Downloads; document picker is the fallback. */
     fun saveExport(file: File) {
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { saveToGallery(context, file) }
-            if (ok) savedToGallery = true else saveLauncher.launch(file.name)
+            val ok = withContext(Dispatchers.IO) { saveToDownloads(context, file) }
+            if (ok) savedToDownloads = true else saveLauncher.launch(file.name)
         }
     }
 
     fun startJob() {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
-        savedToGallery = false
+        savedToDownloads = false
         rangeError = false
         val durationSec = info.durationMs / 1000.0
         // Validate trim input before touching the engine.
@@ -404,9 +404,9 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                             onClick = { saveExport(j.file) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text(stringResource(R.string.m2_save)) }
-                        if (savedToGallery) {
+                        if (savedToDownloads) {
                             Text(
-                                stringResource(R.string.m2_saved_gallery),
+                                stringResource(R.string.m2_saved_downloads),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 8.dp)
                             )

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -163,7 +164,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     val videoPickerRequest = androidx.activity.result.PickVisualMediaRequest(
         ActivityResultContracts.PickVisualMedia.VideoOnly
     )
-    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val audioPicker = rememberLauncherForActivityResult(OpenAudioAtDownloads()) { uri ->
         onPicked(uri)
     }
     val audioTypes = arrayOf("audio/*")
@@ -430,5 +431,26 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             }
             else -> { }
         }
+    }
+}
+
+/**
+ * OpenDocument that starts in the Downloads folder (0.7.1, the
+ * owner's field request: «عند الاستيراد اجعله يوجهك تلقائيا الى
+ * ملفات mp3» — his extracted MP3s save into Downloads since 0.7.1,
+ * so the audio picker opens there). EXTRA_INITIAL_URI is a hint:
+ * pickers that honor it start in Downloads; the audio/* type
+ * filter applies everywhere regardless.
+ */
+private class OpenAudioAtDownloads : ActivityResultContracts.OpenDocument() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        val intent = super.createIntent(context, input)
+        try {
+            val downloads = DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents", "primary:Download"
+            )
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloads)
+        } catch (e: Exception) { }
+        return intent
     }
 }

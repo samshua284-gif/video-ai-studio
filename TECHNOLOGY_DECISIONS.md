@@ -467,3 +467,27 @@ contents himself:
   time and +~570 MB of app size — and he chose: «إبقاء small — نفس
   السرعة الحالية». The accuracy gains of 0.7.0 therefore come from
   the speech-only pipeline and the filters, not from a bigger model.
+
+## TD-012 — Saves land in Downloads; audio picker opens there (0.7.1, 2026-11-27)
+
+Field report on 0.7.0, same day: the owner extracted an MP3 from
+his clip, pressed «حفظ في الاستيديو», got the saved ✓ — and could
+not find the file anywhere he looks. The ✓ was honest but the
+destination was wrong for him: `saveToGallery` (his own
+2026-11-25 requirement) published audio to Music/VideoAIStudio,
+which is neither Downloads nor anywhere the file manager shows
+him first. His order replaced the rule: the button now reads
+«حفظ في مدير الملفات» (his exact words) and `saveToDownloads`
+publishes every media-tool export into the public Downloads
+folder via MediaStore.Downloads; the document-picker fallback on
+failure is unchanged. GallerySaver.kt is deleted; the Gallery
+rule of 2026-11-25 is superseded by this decision.
+
+Same report, second half: importing the extracted MP3 into the
+transcription tool should «يوجهك تلقائيا الى ملفات mp3». The
+transcription audio picker now launches through
+`OpenAudioAtDownloads`, an OpenDocument contract that adds
+EXTRA_INITIAL_URI for the Downloads document — a hint each
+picker may honor; the audio/* filter applies regardless. That is
+the strongest steering the platform offers a caller; it is
+recorded here as best-effort by design, not as a guarantee.

@@ -63,8 +63,8 @@
     <string name="m2_result_duration">مدة الناتج</string>
     <string name="m2_result_tracks">المسارات</string>
     <string name="m2_result_path">محفوظ داخل التطبيق في</string>
-    <string name="m2_save">حفظ في الاستيديو</string>
-    <string name="m2_saved_gallery">حُفظ في الاستيديو ✓</string>
+    <string name="m2_save">حفظ في مدير الملفات</string>
+    <string name="m2_saved_downloads">حُفظ في التنزيلات ✓</string>
     <string name="m2_chk_exists">الملف موجود</string>
     <string name="m2_chk_size">الحجم أكبر من صفر</string>
     <string name="m2_chk_duration">المدة مقروءة</string>
