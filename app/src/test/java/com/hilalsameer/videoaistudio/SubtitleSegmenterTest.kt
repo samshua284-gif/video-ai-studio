@@ -37,6 +37,21 @@ class SubtitleSegmenterTest {
     }
 
     @Test
+    fun cuesSitOnVoiceSpansOnly() {
+        // Voice in 0..4 and 6..10 of a 29 s window; 4..6 is silence.
+        val seg = AsrSegment(
+            0.0, 29.0, "One here. Two here. Three go. Four go.",
+            listOf(0.0 to 4.0, 6.0 to 10.0)
+        )
+        val cues = SubtitleSegmenter.resegment(listOf(seg))
+        assertEquals(4, cues.size)
+        assertTrue(cues.none { it.startSec < 6.0 && it.endSec > 4.0 })
+        assertEquals(4.0, cues[1].endSec, 1e-9)
+        assertEquals(6.0, cues[2].startSec, 1e-9)
+        assertTrue(cues.all { it.endSec > it.startSec })
+    }
+
+    @Test
     fun unpunctuatedStaysWhole() {
         val out = SubtitleSegmenter.resegment(listOf(AsrSegment(5.0, 9.0, "no punctuation here")))
         assertEquals(1, out.size)

@@ -11,7 +11,14 @@ import java.util.Locale
 data class AsrSegment(
     val startSec: Double,
     val endSec: Double,
-    val text: String
+    val text: String,
+    /**
+     * Measured speech spans (absolute seconds) inside this
+     * segment, from the silero VAD (0.6.5): where the voice
+     * actually is. Empty when unknown (VAD error, imported
+     * files) — timing then falls back to the segment's bounds.
+     */
+    val spans: List<Pair<Double, Double>> = emptyList()
 )
 
 /** Pure SRT/TXT rendering for recognized segments (unit-tested). */

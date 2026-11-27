@@ -65,16 +65,71 @@ object SubtitleSegmenter {
                 out.add(seg)
                 continue
             }
-            val totalWeight = sentences.sumOf { maxOf(it.length, 1) }.toDouble()
-            val span = seg.endSec - seg.startSec
-            var cursor = seg.startSec
-            sentences.forEachIndexed { idx, sentence ->
-                val w = maxOf(sentence.length, 1) / totalWeight
-                val end = if (idx == sentences.lastIndex) seg.endSec else cursor + span * w
+            // 0.6.5: when the VAD measured where the voice is, the
+            // sentences live on the speech spans only — a cue
+            // appears with the voice, disappears when it pauses,
+            // and silence stays empty (owner's exact request).
+            // Without spans, fall back to the whole window (0.6.4).
+            val spans = seg.spans
+                .map { maxOf(it.first, seg.startSec) to minOf(it.second, seg.endSec) }
+                .filter { it.second > it.first }
+                .sortedBy { it.first }
+            distribute(
+                sentences,
+                if (spans.isEmpty()) listOf(seg.startSec to seg.endSec) else spans,
+                out
+            )
+        }
+        return out
+    }
+
+    /**
+     * Place sentences on timeline spans: each sentence's ideal
+     * share of the total span time comes from its length; a
+     * sentence lives wholly inside one span, so a cue never
+     * stretches across a silence gap. A group may overflow its
+     * span by a quarter (the timings are approximations) and is
+     * then compressed to fit; a group that underfills keeps its
+     * ideal durations — a cue ends early rather than lingering.
+     */
+    private fun distribute(
+        sentences: List<String>,
+        spans: List<Pair<Double, Double>>,
+        out: ArrayList<AsrSegment>
+    ) {
+        val totalLen = sentences.sumOf { maxOf(it.length, 1) }.toDouble()
+        val totalTime = spans.sumOf { it.second - it.first }
+        fun ideal(sentence: String) = totalTime * maxOf(sentence.length, 1) / totalLen
+        var si = 0
+        spans.forEachIndexed { spanIdx, (spanStart, spanEnd) ->
+            val spanLen = spanEnd - spanStart
+            val isLastSpan = spanIdx == spans.lastIndex
+            val group = mutableListOf<String>()
+            var groupIdeal = 0.0
+            while (si < sentences.size) {
+                val next = ideal(sentences[si])
+                if (!isLastSpan && group.isNotEmpty() && groupIdeal + next > spanLen * 1.25) break
+                group += sentences[si]
+                groupIdeal += next
+                si++
+            }
+            if (group.isEmpty()) return@forEachIndexed
+            val scale = if (groupIdeal > spanLen) spanLen / groupIdeal else 1.0
+            var cursor = spanStart
+            for (sentence in group) {
+                val end = minOf(cursor + ideal(sentence) * scale, spanEnd)
                 out.add(AsrSegment(cursor, end, sentence))
                 cursor = end
             }
         }
-        return out
+        // Snap the final cue to the timeline's exact end (float dust
+        // would otherwise leave it a few nanoseconds short).
+        if (out.isNotEmpty()) {
+            val last = out.last()
+            val target = spans.last().second
+            if (kotlin.math.abs(target - last.endSec) < 0.01) {
+                out[out.lastIndex] = last.copy(endSec = target)
+            }
+        }
     }
 }

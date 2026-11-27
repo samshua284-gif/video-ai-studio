@@ -104,8 +104,15 @@ class AsrEngine(private val context: Context) {
         return v
     }
 
-    /** Seconds of speech the VAD finds in one window. */
-    private fun speechSeconds(v: Vad, samples: FloatArray): Double {
+    /**
+     * The speech spans the VAD finds in one window, as absolute
+     * seconds (0.6.5): not just how much speech, but WHERE it is —
+     * subtitle cues are placed on these spans so a cue appears
+     * with the voice and ends when the voice ends, and silence
+     * stays empty. Segment starts are sample indices relative to
+     * this window (the Vad is reset after every window).
+     */
+    private fun speechSpans(v: Vad, samples: FloatArray, windowStartSec: Double): List<Pair<Double, Double>> {
         var off = 0
         while (off < samples.size) {
             val n = min(VAD_WINDOW, samples.size - off)
@@ -119,13 +126,16 @@ class AsrEngine(private val context: Context) {
             off += n
         }
         v.flush()
-        var speech = 0L
+        val spans = mutableListOf<Pair<Double, Double>>()
         while (!v.empty()) {
-            speech += v.front().samples.size
+            val seg = v.front()
+            val s = windowStartSec + seg.start / 16000.0
+            val e = s + seg.samples.size / 16000.0
+            if (e > s) spans += s to e
             v.pop()
         }
         v.reset()
-        return speech / 16000.0
+        return spans
     }
 
     /** The translator's proven configuration (threads widened 0.5.1). */
@@ -200,10 +210,15 @@ class AsrEngine(private val context: Context) {
             val endSec = (off + n) / 16000.0
             if (rms(samples) >= SILENCE_RMS) {
                 // VAD gate (0.5.1): skip windows without real speech.
-                // A VAD error decodes anyway — never lose speech to it.
+                // A VAD error decodes anyway — never lose speech to
+                // it. The spans also ride into the segment (0.6.5)
+                // so cues can sit on the voice itself.
+                var spans: List<Pair<Double, Double>> = emptyList()
                 val decode = try {
-                    VadGate.shouldDecode(speechSeconds(vadFor(), samples))
+                    spans = speechSpans(vadFor(), samples, startSec)
+                    VadGate.shouldDecode(spans.sumOf { it.second - it.first })
                 } catch (e: Exception) {
+                    spans = emptyList()
                     true
                 }
                 if (decode) {
@@ -212,7 +227,7 @@ class AsrEngine(private val context: Context) {
                         stream.acceptWaveform(samples, 16000)
                         rec.decode(stream)
                         val text = rec.getResult(stream).text.trim()
-                        if (text.isNotEmpty()) segments += AsrSegment(startSec, endSec, text)
+                        if (text.isNotEmpty()) segments += AsrSegment(startSec, endSec, text, spans)
                     } finally {
                         try { stream.release() } catch (e: Exception) { }
                     }
