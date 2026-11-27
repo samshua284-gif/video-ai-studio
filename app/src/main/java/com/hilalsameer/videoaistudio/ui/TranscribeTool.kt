@@ -439,7 +439,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
  * owner's field request: «عند الاستيراد اجعله يوجهك تلقائيا الى
  * ملفات mp3» — his extracted MP3s save into Downloads since 0.7.1,
  * so the audio picker opens there). EXTRA_INITIAL_URI is a hint:
- * pickers that honor it start in Downloads; the audio/* type
+ * pickers that honor it start in Downloads; the audio mime-type
  * filter applies everywhere regardless.
  */
 private class OpenAudioAtDownloads : ActivityResultContracts.OpenDocument() {
