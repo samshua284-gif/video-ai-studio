@@ -152,6 +152,7 @@ class TranscribeService : Service() {
                 wav, lang,
                 { done, total ->
                     state.value = TranscribeJobState.Transcribing(done, total)
+                    acquireWakeLock()
                     updateNotification(
                         getString(R.string.m4_transcribing, done, total), done, total
                     )
@@ -295,12 +296,20 @@ class TranscribeService : Service() {
         getSystemService(NotificationManager::class.java).notify(DONE_NOTIF_ID, n)
     }
 
+    /** Acquires the wake lock, or — called again per part (0.5.7) —
+     *  renews its deadline. The original one-shot 6-hour timeout
+     *  could lapse in the middle of a very long film and let the
+     *  CPU suspend again; renewing on every part keeps the lock
+     *  alive for exactly as long as the job itself runs. */
     private fun acquireWakeLock() {
-        val pm = getSystemService(PowerManager::class.java)
-        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "videoaistudio:asr")
-        wl.setReferenceCounted(false)
+        val wl = wakeLock ?: run {
+            val pm = getSystemService(PowerManager::class.java)
+            pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "videoaistudio:asr").also {
+                it.setReferenceCounted(false)
+                wakeLock = it
+            }
+        }
         wl.acquire(WAKELOCK_TIMEOUT_MS)
-        wakeLock = wl
     }
 
     private fun releaseWakeLock() {
