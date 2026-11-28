@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -411,11 +412,20 @@ fun TranslationCorrectionScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        source.getOrNull(i)?.text ?: "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
-                    )
+                    // 0.10.2 (TD-027, the owner's added item):
+                    // the source text is read-only but not
+                    // inert — a SelectionContainer around the
+                    // value alone lets him long-press, select
+                    // and copy it. The container wraps only
+                    // this Text: the edit field below keeps
+                    // its own text-field selection, untouched.
+                    SelectionContainer {
+                        Text(
+                            source.getOrNull(i)?.text ?: "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                        )
+                    }
                     OutlinedTextField(
                         value = texts[i],
                         onValueChange = { texts[i] = it },

@@ -1610,3 +1610,78 @@ What only the owner's hands can prove: the restore
 feel after a real exit, and re-translating a garbled
 cue on a real film — the synthetic guarantees are what
 this build claims, nothing more.
+
+## TD-027 — Station exit returns to the tool's result screen; selectable source text in the translation station (0.10.2, 2026-11-28)
+
+Ordered by the owner after his field test of 0.10.1
+(verdict: everything good except this): exiting the
+correction station — in the transcription tool and in
+the translation tool alike — threw him to the app's
+main dashboard instead of returning him to the tool
+screen he had entered from. One narrow fix; nothing
+else was built, plus one item the owner added mid-build
+(recorded below).
+
+**Root cause — the same two causes in both tools.** A
+correction station is a state branch inside its tool's
+screen (TranscribeToolScreen, TranslateToolScreen),
+not a navigation destination. (1) The tool's own header
+was composed ABOVE the branch: the outer Column first
+rendered the tool's back button — bound to
+nav.popBackStack(), the dashboard — and only then the
+station, so while the station was open two back buttons
+were stacked on screen and the first of them, in the
+position back occupies on every other screen, left the
+tool entirely. (2) The system back was not intercepted:
+the app had no BackHandler anywhere, so the Android
+back button or gesture popped the whole tool
+destination off the back stack, station or not. The
+station's internal exits (its own back, its save) were
+already correct in code; the two paths above are the
+ones that betrayed the exit intent.
+
+**The fix.** The screen decision is now a pure shared
+core, media/StationNav: screen(stationOpen, hasResult)
+returns STATION only while the station is open and a
+finished result stands behind it, and exit(stationOpen)
+is the single exit transition — the flag clears, the
+tool screen returns. Both tool screens take the
+decision FIRST, before their header is composed: while
+the station is open only the station is composed, so
+the only back on screen is the station's own. A
+BackHandler(enabled = correcting) in each tool screen
+routes the system back through the same exit. Every
+exit path — save, the station's back, the system back —
+now lands on the owning tool's result screen, with the
+corrected result the service already holds, exports and
+station re-entry exactly as before entering. The
+defensive case (an open flag with no result behind it)
+resolves to the tool screen itself, its home state when
+no result exists: never a crash, never a dead screen.
+Nothing else changed: station internals, the draft
+semantics of TD-026, the memories, the exports and the
+services' state contracts are untouched.
+
+**The owner's added item (mid-build, by his explicit
+order with a field screenshot).** In the translation
+station the read-only source text («النص الأصلي») was
+plain display text: a long-press selected nothing. The
+source value now sits in a SelectionContainer, wrapped
+around that Text alone, so he can long-press, select
+and copy it. The translation edit field below keeps its
+own text-field selection and is unchanged.
+
+Verification: host harness mt102 on the real shipped
+StationNav — the full transition table for the decision
+both screens call (station shows only open-with-result;
+exit from a result-backed session lands on the tool
+screen with the result still standing; exit without a
+result falls back to the tool home; exit is idempotent;
+re-entry works), with a JUnit twin (StationNavTest) in
+CI. The selectable source is a Compose affordance over
+an unchanged Text; it carries no logic to harness.
+What only the owner's phone can prove: the actual
+on-device back behaviour (system gesture and button,
+per tool and per exit path) and the long-press copy
+feel — the harness proves the state decision the UI
+makes, not the platform's delivery of the gesture.

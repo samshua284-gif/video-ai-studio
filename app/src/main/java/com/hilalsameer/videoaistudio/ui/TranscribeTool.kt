@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -67,6 +68,7 @@ import com.hilalsameer.videoaistudio.data.inspectVideo
 import com.hilalsameer.videoaistudio.media.DraftsRepository
 import com.hilalsameer.videoaistudio.media.ProjectKind
 import com.hilalsameer.videoaistudio.media.ProjectsRepository
+import com.hilalsameer.videoaistudio.media.StationNav
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.exportsDir
 import kotlinx.coroutines.Dispatchers
@@ -330,6 +332,15 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     var memoryForSession by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var taughtCount by remember { mutableIntStateOf(0) }
 
+    // 0.10.2 (TD-027): while the correction station is
+    // open, the system back exits the STATION to this
+    // screen. The station is a branch of this destination,
+    // not a destination of its own, so without this handler
+    // the system back pops the whole tool to the dashboard.
+    BackHandler(enabled = correcting) {
+        correcting = StationNav.exit(correcting)
+    }
+
     val doneSegments = (job as? TranscribeJobState.Done)?.segments
     LaunchedEffect(doneSegments) {
         if (doneSegments != null) editedText = SubtitleFormat.buildTxt(doneSegments)
@@ -560,22 +571,25 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())
     ) {
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
-        Text(
-            text = stringResource(R.string.tool_transcribe),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(12.dp))
-
         // 0.10.0 (TD-025): while the correction station is
         // open it owns the screen. It receives the Done
         // segments and the correction-memory snapshot, and
         // its save makes the corrected cues the result.
-        if (correcting && doneSegments != null) {
+        // 0.10.2 (TD-027): the decision is taken FIRST,
+        // before this tool's own header is composed — until
+        // 0.10.1 the header, with its dashboard-bound back
+        // button, sat live above the station, so the first
+        // back on screen left the tool entirely. Now the
+        // station is the only thing composed while it is
+        // open, and every exit (save, the station's back,
+        // the system back above) is the StationNav exit:
+        // back to this screen and its result.
+        if (StationNav.screen(correcting, doneSegments != null) ==
+            StationNav.Screen.STATION
+        ) {
             CorrectionScreen(
                 info = state.currentInfo,
-                segments = doneSegments,
+                segments = doneSegments!!,
                 memory = memoryForSession,
                 onSave = { corrected, pairs ->
                     if (pairs.isNotEmpty()) {
@@ -590,12 +604,20 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     }
                     TranscribeService.applyCorrectedSegments(context, corrected)
                     taughtCount = pairs.size
-                    correcting = false
+                    correcting = StationNav.exit(correcting)
                 },
-                onCancel = { correcting = false }
+                onCancel = { correcting = StationNav.exit(correcting) }
             )
             return@Column
         }
+
+        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+        Text(
+            text = stringResource(R.string.tool_transcribe),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(12.dp))
 
         HowToCard(
             steps = listOf(

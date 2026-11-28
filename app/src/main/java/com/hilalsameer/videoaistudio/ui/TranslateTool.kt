@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,7 @@ import com.hilalsameer.videoaistudio.media.MtLanguages
 import com.hilalsameer.videoaistudio.media.ProjectKind
 import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.SrtParser
+import com.hilalsameer.videoaistudio.media.StationNav
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.SubtitleMerge
 import com.hilalsameer.videoaistudio.media.exportsDir
@@ -124,6 +126,15 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
     // The media of a restored draft, re-inspected at restore
     // time for the station's preview.
     var restoredMediaInfo by remember { mutableStateOf<VideoInfo?>(null) }
+
+    // 0.10.2 (TD-027): while the correction station is
+    // open, the system back exits the STATION to this
+    // screen. The station is a branch of this destination,
+    // not a destination of its own, so without this handler
+    // the system back pops the whole tool to the dashboard.
+    BackHandler(enabled = correcting) {
+        correcting = StationNav.exit(correcting)
+    }
     val mergeParts = remember { mutableStateListOf<MergePart>() }
     var importError by remember { mutableStateOf(false) }
 
@@ -306,14 +317,6 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState())
     ) {
-        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
-        Text(
-            text = stringResource(R.string.tool_translate),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(12.dp))
-
         // 0.10.1 (TD-026): while the translation correction
         // station is open it owns the screen, exactly as the
         // transcription station does. It receives the Done
@@ -321,13 +324,25 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
         // language pair and the translation-memory snapshot;
         // its save makes the corrected cues the result and
         // refreshes the work draft.
-        if (correcting && doneState != null) {
+        // 0.10.2 (TD-027): the decision is taken FIRST,
+        // before this tool's own header is composed — until
+        // 0.10.1 the header, with its dashboard-bound back
+        // button, sat live above the station, so the first
+        // back on screen left the tool entirely. Now the
+        // station is the only thing composed while it is
+        // open, and every exit (save, the station's back,
+        // the system back above) is the StationNav exit:
+        // back to this screen and its result.
+        if (StationNav.screen(correcting, doneState != null) ==
+            StationNav.Screen.STATION
+        ) {
+            val ds = doneState!!
             TranslationCorrectionScreen(
                 info = if (sourceFromAsr) state.currentInfo else restoredMediaInfo,
-                source = doneState.source,
-                segments = doneState.segments,
-                srcLang = doneState.srcLang,
-                tgtLang = doneState.tgtLang,
+                source = ds.source,
+                segments = ds.segments,
+                srcLang = ds.srcLang,
+                tgtLang = ds.tgtLang,
                 memory = memoryForSession,
                 onSave = { corrected, pairs ->
                     if (pairs.isNotEmpty()) {
@@ -340,12 +355,20 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                         }
                     }
                     TranslateService.applyCorrectedSegments(context, corrected)
-                    correcting = false
+                    correcting = StationNav.exit(correcting)
                 },
-                onCancel = { correcting = false }
+                onCancel = { correcting = StationNav.exit(correcting) }
             )
             return@Column
         }
+
+        TextButton(onClick = onBack) { Text(stringResource(R.string.back)) }
+        Text(
+            text = stringResource(R.string.tool_translate),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(12.dp))
 
         HowToCard(
             steps = listOf(
