@@ -71,6 +71,8 @@
     <string name="m2_result_path">محفوظ داخل التطبيق في</string>
     <string name="m2_save">حفظ في مدير الملفات</string>
     <string name="m2_saved_downloads">حُفظ في التنزيلات ✓</string>
+    <string name="m2_save_studio">الحفظ في الاستوديو</string>
+    <string name="m2_saved_studio">حُفظ في الاستوديو ✓</string>
     <string name="m2_chk_exists">الملف موجود</string>
     <string name="m2_chk_size">الحجم أكبر من صفر</string>
     <string name="m2_chk_duration">المدة مقروءة</string>

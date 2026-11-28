@@ -53,7 +53,7 @@ import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.ValidationReport
 import com.hilalsameer.videoaistudio.media.exportsDir
 import com.hilalsameer.videoaistudio.media.prepareInputFile
-import com.hilalsameer.videoaistudio.media.saveToDownloads
+import com.hilalsameer.videoaistudio.media.saveVideoToGallery
 import com.hilalsameer.videoaistudio.media.validateExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -111,7 +111,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         ActivityResultContracts.PickVisualMedia.VideoOnly
     )
 
-    var savedToDownloads by remember { mutableStateOf(false) }
+    var savedToStudio by remember { mutableStateOf(false) }
 
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -134,12 +134,18 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
         }
     }
 
-    /** Save = publish into Downloads; document picker is the fallback. */
+    /**
+     * Save (0.9.0, TD-018): both audio-tool outputs are video
+     * clips (the cleaned audio remuxed with the untouched video
+     * stream), so they publish into the Studio gallery
+     * collection («الحفظ في الاستوديو») like every video save.
+     * The document picker is the fallback.
+     */
     fun saveExport(file: File) {
         scope.launch {
-            val uri = withContext(Dispatchers.IO) { saveToDownloads(context, file) }
+            val uri = withContext(Dispatchers.IO) { saveVideoToGallery(context, file) }
             if (uri != null) {
-                savedToDownloads = true
+                savedToStudio = true
                 // 0.9.0 (TD-016): a completed save joins Projects.
                 withContext(Dispatchers.IO) {
                     ProjectsRepository.register(
@@ -154,7 +160,7 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
     fun startJob() {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
-        savedToDownloads = false
+        savedToStudio = false
         job = AudioJob.Preparing
         scope.launch {
             try {
@@ -496,10 +502,10 @@ fun AudioToolScreen(kind: AudioKind, state: StudioState, onBack: () -> Unit) {
                         Button(
                             onClick = { saveExport(j.file) },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(stringResource(R.string.m2_save)) }
-                        if (savedToDownloads) {
+                        ) { Text(stringResource(R.string.m2_save_studio)) }
+                        if (savedToStudio) {
                             Text(
-                                stringResource(R.string.m2_saved_downloads),
+                                stringResource(R.string.m2_saved_studio),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 8.dp)
                             )

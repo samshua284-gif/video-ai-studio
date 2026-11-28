@@ -50,6 +50,7 @@ import com.hilalsameer.videoaistudio.media.ValidationReport
 import com.hilalsameer.videoaistudio.media.exportsDir
 import com.hilalsameer.videoaistudio.media.prepareInputFile
 import com.hilalsameer.videoaistudio.media.saveToDownloads
+import com.hilalsameer.videoaistudio.media.saveVideoToGallery
 import com.hilalsameer.videoaistudio.media.validateExport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -132,6 +133,7 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
     )
 
     var savedToDownloads by remember { mutableStateOf(false) }
+    var savedToStudio by remember { mutableStateOf(false) }
     // Before/after comparison state (TD-005: the shared compare
     // component serves every tool, this screen included).
     var lastInput by remember { mutableStateOf<File?>(null) }
@@ -159,12 +161,21 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         }
     }
 
-    /** Save = publish into Downloads; document picker is the fallback. */
+    /**
+     * Save, split by output type (0.9.0, TD-018): an extracted
+     * audio file publishes into Downloads («حفظ في مدير
+     * الملفات», the 0.7.1 rule); a video publishes into the
+     * Studio gallery collection («الحفظ في الاستوديو»). The
+     * document picker is the fallback for both.
+     */
     fun saveExport(file: File) {
         scope.launch {
-            val uri = withContext(Dispatchers.IO) { saveToDownloads(context, file) }
+            val uri = withContext(Dispatchers.IO) {
+                if (kind == ToolKind.EXTRACT) saveToDownloads(context, file)
+                else saveVideoToGallery(context, file)
+            }
             if (uri != null) {
-                savedToDownloads = true
+                if (kind == ToolKind.EXTRACT) savedToDownloads = true else savedToStudio = true
                 // 0.9.0 (TD-016): a completed save joins Projects.
                 withContext(Dispatchers.IO) {
                     ProjectsRepository.register(
@@ -180,6 +191,7 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
         savedToDownloads = false
+        savedToStudio = false
         rangeError = false
         val durationSec = info.durationMs / 1000.0
         // Validate trim input before touching the engine.
@@ -425,10 +437,24 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                         Button(
                             onClick = { saveExport(j.file) },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(stringResource(R.string.m2_save)) }
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (kind == ToolKind.EXTRACT) R.string.m2_save
+                                    else R.string.m2_save_studio
+                                )
+                            )
+                        }
                         if (savedToDownloads) {
                             Text(
                                 stringResource(R.string.m2_saved_downloads),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                        if (savedToStudio) {
+                            Text(
+                                stringResource(R.string.m2_saved_studio),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 8.dp)
                             )

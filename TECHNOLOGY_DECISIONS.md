@@ -672,3 +672,31 @@ round by his order («الان تعديل وبناء نموذج medium مع
    legacy path column below it — because his audio is
    scattered across many folders and the single gathered
    list must say where each file sits while he picks.
+
+## TD-018 — Saves split by output type: video to the Studio, audio to Downloads (0.9.0, owner's order, 2026-11-28)
+
+TD-012 moved every save into Downloads after the owner's MP3
+went invisible in a Gallery collection. His correction of
+2026-11-28 splits the rule by what is being saved: «عند حفظ
+الفيديو تكون خانه الحفظ مكتوبه حفظ في مدير الملفات قم
+بتعديلها الى الحفظ في الاستوديو، وحفظ الصوتيات الحفظ في مدير
+الملفات». The label and the destination move together — a
+button never promises one place and delivers to another.
+
+What changed: a new media/GallerySaver.kt publishes video
+outputs through MediaStore.Video into Movies/VideoAIStudio
+(the collection the system Studio/Gallery shows) and returns
+the content URI, mirroring DownloadsSaver's contract, so the
+TD-016 Projects registration works unchanged on both paths.
+The document-picker fallback is kept for both. Classified by
+the output file itself: MediaTools TRIM and COMPRESS (MP4)
+and both AudioTools outputs (the denoised and enhanced clips
+are MP4 video — cleaned audio remuxed with the untouched
+video stream) now save with the button «الحفظ في
+الاستوديو» / "Save to Studio" and confirm «حُفظ في
+الاستوديو ✓». MediaTools EXTRACT (MP3/WAV) is untouched:
+Downloads, «حفظ في مدير الملفات», «حُفظ في التنزيلات ✓» —
+the 0.7.1 behaviour exactly. Text outputs are outside the
+split: transcription/translation exports go where the owner
+picks in the document picker, and the translation auto-save
+still writes its SRT/TXT to Downloads as before.

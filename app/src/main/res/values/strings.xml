@@ -71,6 +71,8 @@
     <string name="m2_result_path">Saved inside the app at</string>
     <string name="m2_save">Save in File Manager</string>
     <string name="m2_saved_downloads">Saved in Downloads ✓</string>
+    <string name="m2_save_studio">Save to Studio</string>
+    <string name="m2_saved_studio">Saved in the Studio ✓</string>
     <string name="m2_chk_exists">File exists</string>
     <string name="m2_chk_size">Non-empty file</string>
     <string name="m2_chk_duration">Duration readable</string>
