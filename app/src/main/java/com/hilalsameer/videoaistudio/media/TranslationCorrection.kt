@@ -10,6 +10,13 @@ package com.hilalsameer.videoaistudio.media
  * The source segments are read-only inputs here: they key
  * the correction memory and feed re-translation, and no
  * function returns a modified source list.
+ *
+ * TD-028 (0.10.3) adds the same single bounded exception
+ * as the transcription core: [nudge], the translation
+ * station's − / + buttons, delegating to
+ * [TranscriptionCorrection.nudge] and its clamp contract.
+ * It moves the TRANSLATED cue's timings; the source list
+ * stays exactly as read-only as it was.
  */
 object TranslationCorrection {
 
@@ -93,6 +100,27 @@ object TranslationCorrection {
         }
         return out
     }
+
+    /** The nudge step the stations' − / + buttons use —
+     *  the transcription core's step (TD-028). */
+    const val NUDGE_STEP_MS: Long = TranscriptionCorrection.NUDGE_STEP_MS
+
+    /**
+     * TD-028: shifts translated cue [index]'s start and end
+     * together by [deltaMs], under exactly the transcription
+     * core's clamp contract (see
+     * [TranscriptionCorrection.nudge]): never across a
+     * neighbour, never before zero, duration preserved, a
+     * partial shift at a wall, a no-op at a closed one. The
+     * exported translation carries the translated cues'
+     * timings, so this is the list that had to move; the
+     * source segments are not involved.
+     */
+    fun nudge(
+        translated: List<AsrSegment>,
+        index: Int,
+        deltaMs: Long
+    ): List<AsrSegment> = TranscriptionCorrection.nudge(translated, index, deltaMs)
 
     /**
      * One cue's re-translation outcome, as reported by the

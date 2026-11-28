@@ -43,13 +43,19 @@ import kotlinx.coroutines.delay
 /**
  * 0.10.0 (TD-025) — the transcription correction station.
  *
- * The screen's editing state is a list of TEXTS ONLY, one
- * per cue, in cue order. It never holds a start or an end:
- * saving rebuilds the result through
- * [TranscriptionCorrection.applyTextEdits] on the original
- * segments, so every timing and speech span in the saved
- * result is the recognized segment's own value. The lock
- * is in the shape of the data, not in a read-only flag.
+ * The screen's editing state is a list of TEXTS, one per
+ * cue, in cue order, laid over a WORKING cue list. Saving
+ * rebuilds the result through
+ * [TranscriptionCorrection.applyTextEdits] on the working
+ * list, so every speech span in the saved result is the
+ * recognized segment's own value, and every timing is the
+ * segment's own value too — with one bounded exception:
+ * since 0.10.3 (TD-028, the owner's order) the working
+ * list's timings can be shifted, cue by cue, through
+ * [TranscriptionCorrection.nudge] alone — the − / + buttons
+ * on each card. No free-typed time exists anywhere in the
+ * station; the nudge, with its clamps, is the only way a
+ * timing moves.
  *
  * [info] is the imported source file, used only for the
  * hear-the-cue preview (the InputPreview pattern of 0.9.2:
@@ -88,10 +94,25 @@ fun CorrectionScreen(
     val texts = remember(base) {
         mutableStateListOf(*base.map { it.text }.toTypedArray())
     }
+    // 0.10.3 (TD-028): the working cue list. Its timings are
+    // the station's only mutable timings, and they move
+    // exclusively through TranscriptionCorrection.nudge —
+    // the owner's − / + buttons on each card. current()
+    // lays the edited texts over this list, so a saved
+    // result carries the nudged timings with the corrected
+    // texts, and the hear-the-cue preview seeks to the
+    // cue's CURRENT (nudged) position.
+    val working = remember(base) {
+        mutableStateListOf(*base.toTypedArray())
+    }
     fun current(): List<AsrSegment> =
         TranscriptionCorrection.applyTextEdits(
-            base, texts.mapIndexed { i, t -> i to t }.toMap()
+            working, texts.mapIndexed { i, t -> i to t }.toMap()
         )
+    fun nudgeCue(index: Int, deltaMs: Long) {
+        val moved = TranscriptionCorrection.nudge(working, index, deltaMs)
+        if (moved[index] != working[index]) working[index] = moved[index]
+    }
     val suggestions = TranscriptionCorrection.suggestions(current(), memory)
     var dismissed by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -306,7 +327,7 @@ fun CorrectionScreen(
 
         // ---- The cues themselves ----
         Spacer(Modifier.height(14.dp))
-        base.forEachIndexed { i, seg ->
+        working.forEachIndexed { i, seg ->
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 colors = CardDefaults.cardColors(
@@ -345,6 +366,23 @@ fun CorrectionScreen(
                                 )
                             }
                         }
+                        // 0.10.3 (TD-028): the owner's − / +
+                        // timing buttons — a tenth of a
+                        // second per tap, clamped by the
+                        // pure layer at the neighbours and
+                        // at zero. The times in this row are
+                        // read from the working list, so they
+                        // move as he taps.
+                        TextButton(
+                            onClick = {
+                                nudgeCue(i, -TranscriptionCorrection.NUDGE_STEP_MS)
+                            }
+                        ) { Text("−", fontWeight = FontWeight.Bold) }
+                        TextButton(
+                            onClick = {
+                                nudgeCue(i, TranscriptionCorrection.NUDGE_STEP_MS)
+                            }
+                        ) { Text("+", fontWeight = FontWeight.Bold) }
                     }
                     OutlinedTextField(
                         value = texts[i],

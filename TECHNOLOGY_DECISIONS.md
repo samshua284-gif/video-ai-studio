@@ -1685,3 +1685,81 @@ on-device back behaviour (system gesture and button,
 per tool and per exit path) and the long-press copy
 feel — the harness proves the state decision the UI
 makes, not the platform's delivery of the gesture.
+
+## TD-028 — Per-cue timing nudge in both correction stations (0.10.3, 2026-11-28)
+
+Ordered by the owner explicitly («أضف هذا التغيير —
+إصلاح الوقت», after «هل يمكن التحكم في توقيت الترجمة من
+خلال المصحح كوضع زرين موجب وسالب لزيادة وإنقاص الوقت —
+يكون مع كل مربع ترجمة»): every cue card in BOTH
+correction stations gains two buttons, − and +, that
+shift the cue's start and end together by a tenth of a
+second per tap. This deliberately opens the one bounded
+exception to the structural timing lock of TD-025 /
+TD-026 — by the owner's own order, reversing his
+earlier lock for this path and no other. There is still
+no free-typed time, no per-endpoint editing, and no
+global shift anywhere in the app.
+
+**The pure contract** (media/TranscriptionCorrection
+.nudge; media/TranslationCorrection.nudge delegates to
+it verbatim): the shift is computed on the millisecond
+grid — the resolution SRT itself carries. The applied
+shift is the requested one reduced to the room the
+walls leave: the cue's start never goes before the
+previous cue's end and never before zero; its end never
+goes past the next cue's start; the last cue has no
+upper wall. Both endpoints move by the SAME applied
+amount, so the cue's duration on the grid is preserved
+exactly. At a wall the shift is partially applied (a
+60 ms gap admits exactly 60 ms of a 100 ms step); at a
+closed wall it is a no-op. A degenerate cue (end at or
+before start), an out-of-range index, a zero delta, or
+a cue already standing outside its walls (a broken
+imported chain, where no safe direction can be
+promised) is never moved. Speech spans ride through
+copy() unchanged, as with every other station
+operation: they are creation-time measurements that
+nothing downstream reads once the cues exist.
+
+**How it flows.** Each station now keeps a working cue
+list beside its texts; the card header reads its times
+from the working list, so they move as he taps, and the
+hear-the-cue preview seeks to the cue's CURRENT
+(nudged) start and stops at its nudged end. Saving lays
+the edited texts over the working list and hands the
+result to the existing corrected-result paths unchanged
+(TranscribeService.applyCorrectedSegments — its size
+guard stays valid, since a nudge never adds or removes
+a cue — and the translation station's save path
+likewise), so the TD-026 work drafts persist the nudged
+timings and the SRT/TXT exports carry them. The text
+operations are untouched: edit, find-and-replace,
+memory harvest and suggestions, and the re-translation
+offer flow all still move text only, and their
+timing-invariance proofs (mt100 / mt101) still hold for
+text operations — the nudge is the single, explicit
+timing mutation path, and the pure layer's headers say
+so.
+
+Verification: host harness mt103 on the real shipped
+pure files — exact ±100 ms steps with durations
+preserved; the zero floor (full stop at 0, partial
+application from 50 ms); both neighbour walls (closed
+on contiguous cues, exactly-60-of-100 partial
+application across a 60 ms gap, from both sides); the
+last cue's open upper wall; every guard a no-op; a
+seeded 500-nudge random sequence over a six-cue chain
+keeping global monotonic non-overlap and every
+duration after every step; the TD-026 draft round trip
+preserving nudged timings byte-exactly for both tools;
+the exported SRT showing the nudged cue's new times
+with every other cue's line untouched; the translation
+delegate value-identical to the core. JUnit twins
+(TranscriptionCorrectionTest, TranslationCorrectionTest)
+in CI. No new strings — the buttons are the − and +
+symbols themselves — so AR/EN parity stands at 216/216.
+What only the owner's phone can prove: the feel of the
+buttons in the card row and the nudged playback landing
+on the speech to his ear — the harness proves the
+arithmetic and the clamps, not his audition.

@@ -14,7 +14,11 @@ import org.junit.Test
  *  timings and speech spans never do — followed by the
  *  exactness of replace-all and the offer-never-force
  *  semantics of the correction memory. Host twin:
- *  vas-host-test/mt100 (39/39). */
+ *  vas-host-test/mt100 (39/39). TD-028 (0.10.3) adds the
+ *  one bounded exception the owner ordered — [nudge] —
+ *  tested below under its own clamp contract; the text
+ *  operations' lock is unchanged. Host twin for the nudge:
+ *  vas-host-test/mt103. */
 class TranscriptionCorrectionTest {
 
     private val segs = listOf(
@@ -204,5 +208,119 @@ class TranscriptionCorrectionTest {
         )
         assertEquals("c c", r.segments[0].text)
         assertEquals(1, r.changedCues)
+    }
+
+    // ---- TD-028: the nudge, the one bounded timing path ----
+
+    private val gapped = listOf(
+        AsrSegment(1.0, 2.0, "one", listOf(1.1 to 1.9)),
+        AsrSegment(2.3, 3.3, "two"),
+        AsrSegment(3.6, 5.0, "three")
+    )
+
+    private fun ms(sec: Double) = Math.round(sec * 1000)
+
+    @Test
+    fun nudgeMovesBothEndpointsByExactlyTheStep() {
+        val later = TranscriptionCorrection.nudge(gapped, 1, 100)
+        assertEquals(AsrSegment(2.4, 3.4, "two"), later[1])
+        assertSame(gapped[0], later[0])
+        assertSame(gapped[2], later[2])
+        val earlier = TranscriptionCorrection.nudge(gapped, 1, -100)
+        assertEquals(AsrSegment(2.2, 3.2, "two"), earlier[1])
+        // Duration on the grid is preserved exactly.
+        assertEquals(
+            ms(gapped[1].endSec) - ms(gapped[1].startSec),
+            ms(later[1].endSec) - ms(later[1].startSec)
+        )
+        // Text and spans ride through untouched.
+        assertEquals(gapped[0].spans, later[0].spans)
+        assertEquals(gapped.map { it.text }, later.map { it.text })
+    }
+
+    @Test
+    fun nudgeClampsAtTheZeroFloor() {
+        val atZero = listOf(AsrSegment(0.0, 1.0, "a"), AsrSegment(1.5, 2.5, "b"))
+        assertEquals(atZero, TranscriptionCorrection.nudge(atZero, 0, -100))
+        val nearZero = listOf(AsrSegment(0.05, 1.05, "a"), AsrSegment(1.5, 2.5, "b"))
+        val moved = TranscriptionCorrection.nudge(nearZero, 0, -100)
+        assertEquals(AsrSegment(0.0, 1.0, "a"), moved[0])
+    }
+
+    @Test
+    fun nudgeClampsAtNeighbourWalls() {
+        // Contiguous cues: both directions are closed walls.
+        assertEquals(segs, TranscriptionCorrection.nudge(segs, 1, -100))
+        assertEquals(segs, TranscriptionCorrection.nudge(segs, 1, 100))
+        // A 60 ms gap admits exactly 60 ms of the 100 ms step.
+        val tight = listOf(
+            AsrSegment(1.0, 2.0, "a"),
+            AsrSegment(2.06, 3.06, "b")
+        )
+        assertEquals(
+            AsrSegment(1.06, 2.06, "a"),
+            TranscriptionCorrection.nudge(tight, 0, 100)[0]
+        )
+        assertEquals(
+            AsrSegment(2.0, 3.0, "b"),
+            TranscriptionCorrection.nudge(tight, 1, -100)[1]
+        )
+    }
+
+    @Test
+    fun nudgeLastCueHasNoUpperWall() {
+        var cur = gapped
+        repeat(5) { cur = TranscriptionCorrection.nudge(cur, 2, 100) }
+        assertEquals(AsrSegment(4.1, 5.5, "three"), cur[2])
+    }
+
+    @Test
+    fun nudgeGuardsAreNoOps() {
+        assertEquals(gapped, TranscriptionCorrection.nudge(gapped, 0, 0))
+        assertEquals(gapped, TranscriptionCorrection.nudge(gapped, 7, 100))
+        assertEquals(gapped, TranscriptionCorrection.nudge(gapped, -1, 100))
+        val degenerate = listOf(
+            AsrSegment(1.0, 2.0, "a"),
+            AsrSegment(2.5, 2.5, "zero"),
+            AsrSegment(3.0, 4.0, "b")
+        )
+        assertEquals(degenerate, TranscriptionCorrection.nudge(degenerate, 1, 100))
+        val broken = listOf(
+            AsrSegment(1.0, 2.5, "a"),
+            AsrSegment(2.0, 3.0, "overlapping")
+        )
+        assertEquals(broken, TranscriptionCorrection.nudge(broken, 1, -100))
+        assertEquals(broken, TranscriptionCorrection.nudge(broken, 0, 100))
+    }
+
+    @Test
+    fun nudgeSequenceKeepsChainMonotonicAndDurations() {
+        var cur = (0 until 6).map { i ->
+            AsrSegment(i * 2.0 + 0.5, i * 2.0 + 1.7, "cue $i")
+        }
+        val durations = cur.map { ms(it.endSec) - ms(it.startSec) }
+        val rnd = kotlin.random.Random(42)
+        repeat(300) {
+            cur = TranscriptionCorrection.nudge(
+                cur, rnd.nextInt(cur.size), if (rnd.nextBoolean()) 100 else -100
+            )
+            cur.forEachIndexed { i, s ->
+                assertTrue(s.startSec >= 0.0)
+                if (i > 0) assertTrue(s.startSec >= cur[i - 1].endSec)
+                assertEquals(durations[i], ms(s.endSec) - ms(s.startSec))
+            }
+        }
+    }
+
+    @Test
+    fun nudgedSrtShowsNewTimesOnlyOnThatCue() {
+        val moved = TranscriptionCorrection.nudge(gapped, 0, 100)
+        val before = SubtitleFormat.buildSrt(gapped).split("\n")
+            .filter { it.contains(" --> ") }
+        val after = SubtitleFormat.buildSrt(moved).split("\n")
+            .filter { it.contains(" --> ") }
+        assertEquals("00:00:01,100 --> 00:00:02,100", after[0])
+        assertEquals(before[1], after[1])
+        assertEquals(before[2], after[2])
     }
 }

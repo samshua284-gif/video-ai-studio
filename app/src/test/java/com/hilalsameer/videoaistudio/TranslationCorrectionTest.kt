@@ -14,7 +14,11 @@ import org.junit.Test
  * the translation correction station's pure core — timings
  * locked, source untouched, a re-translation offer is never
  * applied until accepted, and the memory semantics match the
- * existing translation editing exactly.
+ * existing translation editing exactly. TD-028 (0.10.3)
+ * adds the one bounded exception the owner ordered — the
+ * [TranslationCorrection.nudge] delegate — tested below;
+ * the text operations' lock is unchanged. Host twin for
+ * the nudge: vas-host-test/mt103.
  */
 class TranslationCorrectionTest {
 
@@ -153,6 +157,63 @@ class TranslationCorrectionTest {
             TranslationCorrection.harvest(
                 source, translated, translated.drop(1)
             ).isEmpty()
+        )
+    }
+
+    // ---- TD-028: the nudge delegate ----
+
+    @Test
+    fun nudgeMovesTranslatedTimingsOnly() {
+        val gapped = listOf(
+            AsrSegment(1.0, 2.0, "Peace be upon you"),
+            AsrSegment(2.3, 3.3, "How are you today"),
+            AsrSegment(3.6, 5.0, "Peace be upon you again")
+        )
+        val moved = TranslationCorrection.nudge(gapped, 1, 100)
+        assertEquals(AsrSegment(2.4, 3.4, "How are you today"), moved[1])
+        assertSame(gapped[0], moved[0])
+        assertSame(gapped[2], moved[2])
+        // The delegate is the transcription core's contract,
+        // value for value.
+        assertEquals(
+            com.hilalsameer.videoaistudio.media.TranscriptionCorrection
+                .nudge(gapped, 1, 100),
+            moved
+        )
+        assertEquals(
+            TranslationCorrection.NUDGE_STEP_MS,
+            com.hilalsameer.videoaistudio.media.TranscriptionCorrection
+                .NUDGE_STEP_MS
+        )
+        // The class fixture is contiguous: both walls closed.
+        assertEquals(translated, TranslationCorrection.nudge(translated, 1, 100))
+        assertEquals(translated, TranslationCorrection.nudge(translated, 1, -100))
+    }
+
+    @Test
+    fun harvestStaysAlignedAfterANudge() {
+        // A nudged cue still harvests by index and text: the
+        // timing path and the memory path do not interfere.
+        val src = listOf(
+            AsrSegment(1.0, 2.0, "This is a tast of the system"),
+            AsrSegment(2.3, 3.3, "Something else")
+        )
+        val machine = listOf(
+            AsrSegment(1.0, 2.0, "هذه تجربة للنظام"),
+            AsrSegment(2.3, 3.3, "شيء آخر")
+        )
+        var corrected = TranslationCorrection.nudge(machine, 0, 100)
+        assertEquals(AsrSegment(1.1, 2.1, "هذه تجربة للنظام"), corrected[0])
+        corrected = TranslationCorrection.applyTextEdits(
+            corrected, mapOf(0 to "هذا اختبار للنظام")
+        )
+        val taught = TranslationCorrection.harvest(src, machine, corrected)
+        assertEquals(
+            mapOf(
+                CorrectionMemory.key("This is a tast of the system") to
+                    "هذا اختبار للنظام"
+            ),
+            taught
         )
     }
 }

@@ -2,13 +2,22 @@ package com.hilalsameer.videoaistudio.media
 
 /**
  * TD-025 — the pure core of the transcription correction
- * station (0.10.0). Everything here moves TEXT ONLY: every
- * function takes segments plus text-keyed edits and returns
- * segments whose start, end and speech spans are the input's
- * own values, carried through [AsrSegment.copy] untouched.
- * No function accepts a timing as input, so no caller of
- * this layer can retime a cue even by accident — the lock
- * is structural, not a display setting.
+ * station (0.10.0). The text functions move TEXT ONLY: they
+ * take segments plus text-keyed edits and return segments
+ * whose start, end and speech spans are the input's own
+ * values, carried through [AsrSegment.copy] untouched. No
+ * text function accepts a timing as input, so no caller of
+ * the text layer can retime a cue even by accident — the
+ * lock is structural, not a display setting.
+ *
+ * TD-028 (0.10.3) adds the ONE bounded exception, on the
+ * owner's explicit order («أضف هذا التغيير — إصلاح الوقت»):
+ * [nudge], the stations' − / + buttons. It is the single
+ * timing-mutation path in this layer, and it is bounded by
+ * its clamp contract — a whole cue shifted by at most the
+ * requested step, never across a neighbour, never before
+ * zero, its duration preserved. Nothing else in the layer
+ * gained a timing parameter.
  */
 object TranscriptionCorrection {
 
@@ -134,6 +143,70 @@ object TranscriptionCorrection {
             }
         }
         return out
+    }
+
+    /** One nudge step: a tenth of a second — the step the
+     *  owner's − / + buttons apply per tap (TD-028). */
+    const val NUDGE_STEP_MS: Long = 100L
+
+    /**
+     * TD-028 — shifts cue [index]'s start AND end together
+     * by [deltaMs] (negative = earlier) on the millisecond
+     * grid, the resolution SRT itself carries. This is the
+     * single bounded exception to the timing lock, ordered
+     * by the owner in 0.10.3; it exists so a cue whose
+     * placement drifted can be walked back onto the speech
+     * by hand, a tenth of a second at a time.
+     *
+     * The clamp contract: the applied shift is the requested
+     * one, reduced to whatever room the walls leave. The
+     * cue's start never goes before the previous cue's end
+     * and never before zero; its end never goes past the
+     * next cue's start (the last cue has no upper wall).
+     * Both endpoints move by the SAME applied amount, so the
+     * cue's duration on the grid is preserved exactly; at a
+     * wall the shift is partially applied (only the room
+     * there is), and at a closed wall it is a no-op that
+     * returns the input list. A degenerate cue (end at or
+     * before start), an out-of-range index, a zero delta, or
+     * a cue already standing outside its walls (a broken
+     * imported chain — no safe direction can be promised)
+     * is never moved. Speech spans ride through
+     * [AsrSegment.copy] unchanged, as with every other
+     * station operation: they are creation-time measurements
+     * that nothing downstream reads once the cues exist.
+     */
+    fun nudge(
+        segments: List<AsrSegment>,
+        index: Int,
+        deltaMs: Long
+    ): List<AsrSegment> {
+        if (index !in segments.indices || deltaMs == 0L) return segments
+        val seg = segments[index]
+        val startMs = Math.round(seg.startSec * 1000)
+        val endMs = Math.round(seg.endSec * 1000)
+        val durationMs = endMs - startMs
+        if (durationMs <= 0L) return segments
+        val loMs = if (index > 0) {
+            Math.round(segments[index - 1].endSec * 1000)
+        } else {
+            0L
+        }
+        val nextStartMs = if (index < segments.lastIndex) {
+            Math.round(segments[index + 1].startSec * 1000)
+        } else {
+            Long.MAX_VALUE
+        }
+        if (startMs < loMs || endMs > nextStartMs) return segments
+        val applied = deltaMs.coerceIn(
+            loMs - startMs, nextStartMs - durationMs - startMs
+        )
+        if (applied == 0L) return segments
+        val moved = seg.copy(
+            startSec = (startMs + applied) / 1000.0,
+            endSec = (endMs + applied) / 1000.0
+        )
+        return segments.mapIndexed { i, s -> if (i == index) moved else s }
     }
 
     /**

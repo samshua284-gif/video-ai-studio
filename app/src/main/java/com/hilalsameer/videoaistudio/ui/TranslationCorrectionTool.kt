@@ -63,14 +63,19 @@ private sealed interface RtState {
  * translation: the offline translator Hilal asked to have
  * INSIDE the corrector.
  *
- * The screen's editing state is a list of TRANSLATED TEXTS
- * ONLY, one per cue. The [source] segments are displayed
- * read-only and key the memory and the re-translation; they
- * are never edited and never rebuilt. Saving rebuilds the
- * result through [TranslationCorrection.applyTextEdits] on
- * the original segments, so every timing in the saved result
- * is the segment's own value — the same structural lock as
- * the transcription station.
+ * The screen's editing state is a list of TRANSLATED
+ * TEXTS, one per cue, laid over a WORKING cue list. The
+ * [source] segments are displayed read-only and key the
+ * memory and the re-translation; they are never edited and
+ * never rebuilt. Saving rebuilds the result through
+ * [TranslationCorrection.applyTextEdits] on the working
+ * list, so every timing in the saved result is the
+ * segment's own value — with the same single bounded
+ * exception as the transcription station: since 0.10.3
+ * (TD-028, the owner's order) the working list's timings
+ * can be shifted, cue by cue, through
+ * [TranslationCorrection.nudge] alone — the − / + buttons
+ * on each card.
  *
  * «أعد ترجمة هذا السطر» runs the EXISTING [MtEngine] on the
  * cue's source text as a single unit — the unit rules do not
@@ -113,10 +118,26 @@ fun TranslationCorrectionScreen(
     val texts = remember(segments) {
         mutableStateListOf(*segments.map { it.text }.toTypedArray())
     }
+    // 0.10.3 (TD-028): the working cue list — the translated
+    // segments with the station's only mutable timings,
+    // moved exclusively through TranslationCorrection.nudge
+    // (the owner's − / + buttons on each card). The source
+    // list is never rebuilt. current() lays the edited
+    // texts over this list, so a saved result carries the
+    // nudged timings with the corrected texts, and the
+    // hear-the-cue preview seeks to the cue's CURRENT
+    // (nudged) position.
+    val working = remember(segments) {
+        mutableStateListOf(*segments.toTypedArray())
+    }
     fun current(): List<AsrSegment> =
         TranslationCorrection.applyTextEdits(
-            segments, texts.mapIndexed { i, t -> i to t }.toMap()
+            working, texts.mapIndexed { i, t -> i to t }.toMap()
         )
+    fun nudgeCue(index: Int, deltaMs: Long) {
+        val moved = TranslationCorrection.nudge(working, index, deltaMs)
+        if (moved[index] != working[index]) working[index] = moved[index]
+    }
     val suggestions = TranslationCorrection.suggestions(source, current(), memory)
     var dismissed by remember { mutableStateOf<Set<Int>>(emptySet()) }
 
@@ -367,7 +388,7 @@ fun TranslationCorrectionScreen(
         // ---- The cues themselves: source above, translation
         // below, the translator at hand ----
         Spacer(Modifier.height(14.dp))
-        segments.forEachIndexed { i, seg ->
+        working.forEachIndexed { i, seg ->
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 colors = CardDefaults.cardColors(
@@ -406,6 +427,23 @@ fun TranslationCorrectionScreen(
                                 )
                             }
                         }
+                        // 0.10.3 (TD-028): the owner's − / +
+                        // timing buttons — a tenth of a
+                        // second per tap, clamped by the
+                        // pure layer at the neighbours and
+                        // at zero. The times in this row are
+                        // read from the working list, so they
+                        // move as he taps.
+                        TextButton(
+                            onClick = {
+                                nudgeCue(i, -TranslationCorrection.NUDGE_STEP_MS)
+                            }
+                        ) { Text("−", fontWeight = FontWeight.Bold) }
+                        TextButton(
+                            onClick = {
+                                nudgeCue(i, TranslationCorrection.NUDGE_STEP_MS)
+                            }
+                        ) { Text("+", fontWeight = FontWeight.Bold) }
                     }
                     Text(
                         stringResource(R.string.m5c_source_label),
