@@ -916,3 +916,76 @@ manifest still carries no INTERNET permission.
 Translation semantics, the module-worker fix,
 AbortableAwait, MtLoadTracker, Projects, medium ASR,
 all save behaviour and timestamps are untouched.
+
+## TD-021 — Arabic is arb_Arab: the translation root cause (0.9.3, 2026-11-28)
+
+**The confession arrived.** 0.9.2's diagnostics worked
+exactly as designed: on the owner's first field run the
+job ended Failed — honestly, with no fake save — and its
+message carried the engine's first real error verbatim:
+
+`Error: Target language code "ara_Arab" is not valid.
+Must be one of: {ace_Arab, ..., arb_Arab, ...,
+eng_Latn, ..., hin_Deva, ...}`
+
+The valid set contains **arb_Arab**. It does not contain
+ara_Arab. Arabic was the only broken code.
+
+**Root cause.** When M5 was ported in 0.6.0, the
+UI→FLORES map was written fresh in Kotlin
+(`MtLanguages` in `media/MtEngine.kt`) instead of being
+copied from the field-proven voice translator, and one
+entry slipped: `"ar" to "ara_Arab"`. Every Arabic
+request therefore threw inside the worker on its first
+unit. From 0.6.0 to 0.9.1 the old worker swallowed
+per-unit errors, so the throw was invisible and the
+guard's pass-through made jobs "succeed" holding the
+source text; TD-019's module-worker fix let the model
+load and jobs complete end-to-end, but the output was
+still the source — until TD-020's diagnostics surfaced
+this error on the first run that could report it.
+
+**Evidence chain (each link checked, none assumed).**
+(1) The field error above, screenshotted from the
+owner's phone 2026-11-28 10:40. (2) The model's OWN
+tokenizer — `tokenizer.json` of Xenova/
+nllb-200-distilled-600M, the exact model this app
+downloads with pinned hashes: `arb_Arab` is present in
+its vocabulary, `ara_Arab` is absent; the other four
+app codes (eng_Latn, hin_Deva, urd_Arab, tur_Latn) are
+all present — Arabic was the only invalid entry.
+(3) The field-proven voice translator's map
+(`app/index.html`): `ar: { ..., nllb: 'arb_Arab' }` —
+the reference the 0.6.0 port should have copied.
+(4) Repo-wide grep before the fix: exactly ONE
+occurrence of the bad code existed, MtEngine.kt's map.
+
+**The fix.** One word: `"ar" to "ara_Arab"` →
+`"ar" to "arb_Arab"`. Nothing else in the map changes;
+no string changes at all in this release.
+
+**Regression lock.** `MtLanguagesTest` (JUnit, runs in
+CI's testDebugUnitTest) asserts the map equals exactly
+{ar→arb_Arab, en→eng_Latn, hi→hin_Deva, ur→urd_Arab,
+tr→tur_Latn} — the five codes verified against the
+tokenizer above. A future edit that drifts the map away
+from the model's contract now fails the build instead
+of failing silently on a phone.
+
+**Lesson.** A language-code map is part of the model's
+contract, not a detail to write from memory: verify
+every code against the model's own tokenizer before
+shipping, exactly as model files are hash-pinned. And
+the meta-lesson of the whole arc: the defect survived
+three releases because the error was swallowed — the
+0.9.2 diagnostics stay permanently, because they are
+what caught this.
+
+**Phone-only remainder, stated honestly.** The code's
+validity is proven here (tokenizer + reference +
+regression lock). What only the owner's phone can prove
+is the generation itself — NLLB's Arabic output quality
+and speed on his Samsung. His re-run of the same EN→AR
+job is the verdict: Arabic text in the result box is
+the first true end-to-end translation in the app's
+history.

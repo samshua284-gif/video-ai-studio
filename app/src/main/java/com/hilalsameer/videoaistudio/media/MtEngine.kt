@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Languages the translation engine serves, UI code → NLLB FLORES. */
 object MtLanguages {
     val codes: Map<String, String> = linkedMapOf(
-        "ar" to "ara_Arab",
+        "ar" to "arb_Arab",
         "en" to "eng_Latn",
         "hi" to "hin_Deva",
         "ur" to "urd_Arab",
