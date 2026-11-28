@@ -1,14 +1,17 @@
 package com.hilalsameer.videoaistudio.ui
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,6 +55,8 @@ import com.hilalsameer.videoaistudio.TranscribeService
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
+import com.hilalsameer.videoaistudio.media.ProjectKind
+import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.exportsDir
 import kotlinx.coroutines.Dispatchers
@@ -117,6 +122,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     LaunchedEffect(lang) { prefs.edit().putString(KEY_ASR_LANG, lang).apply() }
     var editedText by remember { mutableStateOf("") }
     var pendingExport by remember { mutableStateOf<File?>(null) }
+    var pendingExportSource by remember { mutableStateOf("") }
 
     val doneSegments = (job as? TranscribeJobState.Done)?.segments
     LaunchedEffect(doneSegments) {
@@ -169,6 +175,91 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     }
     val audioTypes = arrayOf("audio/*")
 
+    // 0.9.0 (TD-017): the audio import's first door is now an
+    // in-app chooser over the device's own audio library
+    // (MediaStore), because the 0.7.1 system-picker steering —
+    // EXTRA_INITIAL_URI towards Downloads — did not land on his
+    // audio files in the field. The system picker stays as the
+    // visible secondary door («منتقي النظام») and as the
+    // automatic fallback when the library permission is denied.
+    var audioTracks by remember { mutableStateOf<List<AudioTrack>>(emptyList()) }
+    var audioLibraryOpen by remember { mutableStateOf(false) }
+    var audioLibraryLoaded by remember { mutableStateOf(false) }
+    fun loadAudioLibrary() {
+        scope.launch {
+            val tracks = withContext(Dispatchers.IO) { queryAudioLibrary(context) }
+            audioTracks = tracks
+            audioLibraryLoaded = true
+            audioLibraryOpen = true
+        }
+    }
+    val audioPermission = if (Build.VERSION.SDK_INT >= 33) {
+        Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    val audioPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) loadAudioLibrary() else audioPicker.launch(audioTypes)
+    }
+    fun openAudioImport() {
+        if (ContextCompat.checkSelfPermission(context, audioPermission) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            loadAudioLibrary()
+        } else {
+            audioPermLauncher.launch(audioPermission)
+        }
+    }
+
+    @Composable
+    fun AudioLibrarySection() {
+        if (!audioLibraryOpen) return
+        Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(R.string.m4_audio_library),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        if (!audioLibraryLoaded) {
+            Row(modifier = Modifier.padding(top = 8.dp)) { CircularProgressIndicator() }
+        } else if (audioTracks.isEmpty()) {
+            Text(
+                stringResource(R.string.m4_audio_library_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        } else {
+            audioTracks.forEach { track ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        .clickable {
+                            audioLibraryOpen = false
+                            onPicked(track.uri)
+                        },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            track.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            formatDuration(track.durationMs),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     val saveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { dest: Uri? ->
@@ -180,12 +271,20 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     context.contentResolver.openOutputStream(dest)?.use { out ->
                         file.inputStream().use { it.copyTo(out, 1 shl 16) }
                     }
+                    // 0.9.0 (TD-016): the copy finished — the work
+                    // joins Projects under the picked document.
+                    ProjectsRepository.register(
+                        context, ProjectKind.TRANSCRIPT, file.name,
+                        dest.toString(), pendingExportSource
+                    )
                 } catch (e: Exception) { }
             }
         }
     }
 
     fun export(name: String, content: String) {
+        pendingExportSource = state.currentInfo?.name
+            ?: (job as? TranscribeJobState.Done)?.inputName ?: ""
         scope.launch {
             val f = withContext(Dispatchers.IO) {
                 File(exportsDir(context), name).apply {
@@ -259,8 +358,12 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             // and «طريقة الاستخدام» above stays.
             ImportRow(
                 onVideo = { picker.launch(videoPickerRequest) },
-                onAudio = { audioPicker.launch(audioTypes) }
+                onAudio = { openAudioImport() }
             )
+            TextButton(onClick = { audioPicker.launch(audioTypes) }) {
+                Text(stringResource(R.string.m4_system_picker))
+            }
+            AudioLibrarySection()
             return@Column
         }
 
@@ -286,8 +389,11 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 TextButton(onClick = { picker.launch(videoPickerRequest) }) {
                     Text(stringResource(R.string.m2_change_video))
                 }
-                TextButton(onClick = { audioPicker.launch(audioTypes) }) {
+                TextButton(onClick = { openAudioImport() }) {
                     Text(stringResource(R.string.m4_import_audio))
+                }
+                TextButton(onClick = { audioPicker.launch(audioTypes) }) {
+                    Text(stringResource(R.string.m4_system_picker))
                 }
             }
         }
@@ -331,7 +437,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     // re-attaches everything (0.5.3).
                     ImportRow(
                         onVideo = { picker.launch(videoPickerRequest) },
-                        onAudio = { audioPicker.launch(audioTypes) }
+                        onAudio = { openAudioImport() }
                     )
                 }
             }
@@ -370,6 +476,8 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 }
             }
         }
+
+        AudioLibrarySection()
 
         when (val j = job) {
             is TranscribeJobState.Done -> {
@@ -434,13 +542,58 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     }
 }
 
+/** One row of the in-app audio chooser (0.9.0, TD-017). */
+private data class AudioTrack(val uri: Uri, val name: String, val durationMs: Long)
+
+/**
+ * The device's audio library, newest first, from MediaStore —
+ * the same index the system music apps read. Capped so a huge
+ * library cannot flood the scrolling screen. Returns an empty
+ * list on any failure; the caller then offers the system picker.
+ */
+private fun queryAudioLibrary(context: Context): List<AudioTrack> {
+    val out = ArrayList<AudioTrack>()
+    val projection = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.DISPLAY_NAME,
+        MediaStore.Audio.Media.DURATION
+    )
+    try {
+        context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection, null, null,
+            MediaStore.Audio.Media.DATE_ADDED + " DESC"
+        )?.use { c ->
+            val idI = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val nameI = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val durI = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            while (c.moveToNext()) {
+                val name = c.getString(nameI) ?: continue
+                val dur = if (c.isNull(durI)) 0L else c.getLong(durI)
+                out.add(
+                    AudioTrack(
+                        ContentUris.withAppendedId(
+                            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(idI)
+                        ),
+                        name, dur
+                    )
+                )
+                if (out.size >= 100) break
+            }
+        }
+    } catch (e: Exception) { }
+    return out
+}
+
 /**
  * OpenDocument that starts in the Downloads folder (0.7.1, the
  * owner's field request: «عند الاستيراد اجعله يوجهك تلقائيا الى
  * ملفات mp3» — his extracted MP3s save into Downloads since 0.7.1,
  * so the audio picker opens there). EXTRA_INITIAL_URI is a hint:
  * pickers that honor it start in Downloads; the audio mime-type
- * filter applies everywhere regardless.
+ * filter applies everywhere regardless. Since 0.9.0 this is the
+ * secondary door («منتقي النظام»); the in-app MediaStore
+ * chooser above is the primary one (TD-017).
  */
 private class OpenAudioAtDownloads : ActivityResultContracts.OpenDocument() {
     override fun createIntent(context: Context, input: Array<String>): Intent {

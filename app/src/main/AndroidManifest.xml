@@ -11,6 +11,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 0.9.0 (TD-017): read access to the device audio library so
+         the transcription import can offer an in-app MediaStore
+         chooser. READ_MEDIA_AUDIO on API 33+; the legacy storage
+         read below it, capped at API 32. Nothing else in the app
+         uses these — every other import stays on the pickers,
+         which need no permission at all. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

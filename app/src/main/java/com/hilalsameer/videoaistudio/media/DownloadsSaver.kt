@@ -19,11 +19,13 @@ import java.io.File
  * replaced the rule the same day: the button reads
  * «حفظ في مدير الملفات» and the file lands in Downloads, where he
  * actually looks. On API 29+ this needs no permission for the
- * app's own inserts. Returns false on API < 29 or any failure;
- * callers then fall back to the system document picker.
+ * app's own inserts. Returns the published content URI on
+ * success (0.9.0: callers register it in Projects, TD-016), or
+ * null on API < 29 or any failure; callers then fall back to the
+ * system document picker.
  */
-fun saveToDownloads(context: Context, file: File): Boolean {
-    if (Build.VERSION.SDK_INT < 29) return false
+fun saveToDownloads(context: Context, file: File): android.net.Uri? {
+    if (Build.VERSION.SDK_INT < 29) return null
     return try {
         val mime = when (file.extension.lowercase()) {
             "mp3" -> "audio/mpeg"
@@ -39,14 +41,14 @@ fun saveToDownloads(context: Context, file: File): Boolean {
         }
         val resolver = context.contentResolver
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: return false
+            ?: return null
         resolver.openOutputStream(uri)?.use { out ->
             file.inputStream().use { it.copyTo(out, 1 shl 16) }
-        } ?: return false
+        } ?: return null
         val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
         resolver.update(uri, done, null, null)
-        true
+        uri
     } catch (e: Exception) {
-        false
+        null
     }
 }

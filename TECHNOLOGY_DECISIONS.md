@@ -556,3 +556,113 @@ audio and media run buttons use GoldButton explicitly).
 Strings stay bilingual at parity (161 keys); direction follows
 the locale, never forced. No engine, pipeline or behaviour
 changed anywhere.
+
+## TD-015 — Whisper medium replaces small (0.9.0, owner's decision, 2026-11-28)
+
+At 0.7.0 the owner chose small over medium for speed, with the
+trade measured in front of him. In the field he found small's
+word accuracy wanting («لا يعطي نتيجة جيدة إلى حد ما»), and on
+2026-11-27 he reversed the decision explicitly: «بدّل التفريغ
+إلى medium», deferred into the 0.9.0 round with Projects. The
+measured basis stands from the voice-translator corpus study:
+Arabic WER small 11.9% vs medium 5.2% on the same 20-sentence
+corpus through this same sherpa path.
+
+The swap changes model files and folders ONLY — the 0.7.0
+pipeline (silero VAD spans, SpeechChunks planning,
+SpeechTextFilter, the subtitle segmenter) is byte-identical.
+This is deliberately NOT the voice translator's rejected 1.14
+experiment: that failure was a different engine (whisper.cpp
+medium through a JNI bridge, slower and deafer on his phone);
+here the proven sherpa-onnx path stays and only its model
+weights grow. fetchAsrDeps now downloads from
+csukuangfj/sherpa-onnx-whisper-medium into
+models/whisper-medium/ — medium-encoder.int8.onnx
+(374,196,283 B), medium-decoder.int8.onnx (571,059,257 B),
+tokens (816,730 B; the same vocab file as small's, hence the
+same SHA-256) — every pin computed from the verified local
+copies, never transcribed. silero_vad.onnx moves into the same
+folder (pin unchanged); AsrEngine and VadSpans read it there.
+On first run the new engine deletes the retired
+asr/whisper-small materialization so its ~375 MB does not stay
+orphaned on the phone (best-effort; a cleanup failure never
+blocks transcription). Costs, stated to the owner before he
+decided: the APK grows by roughly 570 MB and decode is slower
+per chunk; both are the price of the accuracy he asked for.
+
+## TD-016 — Projects: the works registry (0.9.0, owner's order, 2026-11-28)
+
+The owner asked why a Projects section should exist when the
+grid already carries History, Queue and Batch cards — and the
+honest answer shaped the build: Queue is future work, Batch is
+an action, History is an event log; none of them hands him back
+the work itself. His own definition governed: «المشاريع جيد
+لحفظ ما قمت بعمله» — Projects is where finished works live,
+reopenable. The M8 History card therefore becomes «مشاريعي»
+itself (the registry of completed works IS the history of what
+was produced) and routes to the new page; Queue and Batch stay
+honest M8 placeholders until their milestone.
+
+Implementation: a pure-Kotlin store (media/Projects.kt — entry
+= id, kind, title, locator, source name, creation time;
+hand-rolled JSON, no Android dependencies, host-tested 16/16
+including Arabic/quote/control-character round-trips and
+corrupt-file tolerance) persisted as one small JSON file in
+internal storage by media/ProjectsRepository.kt. An entry is
+registered ONLY after a save really completes: a Downloads
+publish that returned its content URI (saveToDownloads now
+returns the URI instead of a boolean), a document-picker copy
+that finished without error, or the translation service's
+auto-save (which registers both the SRT and the TXT). Kinds
+mirror the tools that actually save: MP3 (extraction),
+TRANSCRIPT (transcription manual save), TRANSLATION,
+ENHANCED (noise and audio-enhance outputs), TRIM, COMPRESS.
+
+The page (ui/ProjectsScreen.kt, dark-and-gold, bottom bar now
+Home / Projects / Settings — all three real) lists works
+newest-first with kind icon, title, date and source; each row
+can open (ACTION_VIEW; plain-path locators resolve through
+the Downloads collection by display name, since a raw path
+cannot be handed to another app), share, or be removed. A row
+whose file was deleted outside the app says «لم يعد الملف
+موجودًا» in place instead of crashing or failing silently.
+Deletion removes the underlying file ONLY for a plain path
+inside the public Downloads folder; every other entry is
+removed from the list alone, and its button says exactly that
+(«إزالة من القائمة» vs «حذف») before it is pressed. Registry
+writes are best-effort: an index failure never fails a save
+that already succeeded.
+
+## TD-017 — Translation percent + in-app audio chooser (0.9.0, field defects, 2026-11-28)
+
+Two field reports from the owner's own use, fixed in the same
+round by his order («الان تعديل وبناء نموذج medium مع
+المشاريع معا»):
+
+1. A 113-cue SRT translation showed no percentage anywhere;
+   he cancelled blind. The per-cue count already existed
+   (TranslateJobState.Translating done/total) — what was
+   missing was the percent and a notification that carried it.
+   Now the m5_translating string itself carries the percent in
+   both the tool UI (over the existing progress bar) and the
+   foreground notification, and progress notifications update
+   on whole-percent changes instead of a one-second clock: at
+   most 100 updates per job, each carrying a number he can act
+   on. The sentence-by-sentence rule and the NLLB engine are
+   untouched.
+
+2. The 0.7.1 audio-import steering (TD-012's
+   EXTRA_INITIAL_URI towards Downloads) did not land on his
+   audio files in his file manager — field verdict negative.
+   The transcription audio import's first door is now an
+   in-app chooser over MediaStore's audio index (name +
+   duration, newest first, capped at 100), feeding the picked
+   content URI into the existing import path unchanged. It
+   needs a runtime permission the app never needed before —
+   READ_MEDIA_AUDIO on API 33+, READ_EXTERNAL_STORAGE
+   (maxSdkVersion 32) below — declared in the manifest and
+   requested only when he taps the audio import. Denial falls
+   back to the existing system picker automatically, and the
+   picker remains a visible secondary button («منتقي النظام»)
+   in both import states; an empty library says so and offers
+   the same door. The video import flow is unchanged.

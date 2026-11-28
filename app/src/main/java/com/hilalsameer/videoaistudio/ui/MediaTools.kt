@@ -44,6 +44,8 @@ import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
+import com.hilalsameer.videoaistudio.media.ProjectKind
+import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.ValidationReport
 import com.hilalsameer.videoaistudio.media.exportsDir
 import com.hilalsameer.videoaistudio.media.prepareInputFile
@@ -55,6 +57,13 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class ToolKind { EXTRACT, TRIM, COMPRESS }
+
+/** The Projects kind a media tool's saved output registers as. */
+private fun projectKindOf(kind: ToolKind): ProjectKind = when (kind) {
+    ToolKind.EXTRACT -> ProjectKind.MP3
+    ToolKind.TRIM -> ProjectKind.TRIM
+    ToolKind.COMPRESS -> ProjectKind.COMPRESS
+}
 
 private sealed interface JobUi {
     data object Idle : JobUi
@@ -139,6 +148,12 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
                     context.contentResolver.openOutputStream(dest)?.use { out ->
                         done.file.inputStream().use { it.copyTo(out, 1 shl 16) }
                     }
+                    // 0.9.0 (TD-016): the copy finished — the work
+                    // joins Projects under the picked document.
+                    ProjectsRepository.register(
+                        context, projectKindOf(kind), done.file.name,
+                        dest.toString(), state.currentInfo?.name ?: ""
+                    )
                 } catch (e: Exception) { }
             }
         }
@@ -147,8 +162,17 @@ fun MediaToolScreen(kind: ToolKind, state: StudioState, onBack: () -> Unit) {
     /** Save = publish into Downloads; document picker is the fallback. */
     fun saveExport(file: File) {
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { saveToDownloads(context, file) }
-            if (ok) savedToDownloads = true else saveLauncher.launch(file.name)
+            val uri = withContext(Dispatchers.IO) { saveToDownloads(context, file) }
+            if (uri != null) {
+                savedToDownloads = true
+                // 0.9.0 (TD-016): a completed save joins Projects.
+                withContext(Dispatchers.IO) {
+                    ProjectsRepository.register(
+                        context, projectKindOf(kind), file.name,
+                        uri.toString(), state.currentInfo?.name ?: ""
+                    )
+                }
+            } else saveLauncher.launch(file.name)
         }
     }
 

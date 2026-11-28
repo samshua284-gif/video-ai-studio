@@ -24,11 +24,11 @@ object VadSpans {
     private const val BLOCK_SAMPLES = 30 * 16000
 
     private fun materialize(context: Context): File {
-        val dir = File(context.filesDir, "asr/whisper-small")
+        val dir = File(context.filesDir, "asr/whisper-medium")
         dir.mkdirs()
         val f = File(dir, "silero_vad.onnx")
         if (!f.exists() || f.length() != VAD_SIZE) {
-            context.assets.open("models/whisper-small/silero_vad.onnx").use { inp ->
+            context.assets.open("models/whisper-medium/silero_vad.onnx").use { inp ->
                 f.outputStream().use { out -> inp.copyTo(out, 1 shl 16) }
             }
             require(f.length() == VAD_SIZE) { "vad copy failed" }

@@ -13,13 +13,16 @@ import java.io.File
 import kotlin.math.min
 
 /**
- * On-device speech recognition (Milestone 4, TD-002): Whisper-small
- * via sherpa-onnx — the exact engine, model files and call pattern
- * the owner already field-proved in his voice translator (its 1.13
- * ear). Fully offline; the manifest declares no INTERNET permission.
- * The model size stays small by the owner's explicit decision
- * (0.7.0): he chose the current speed over the medium model's
- * accuracy when the trade-off was put to him with numbers.
+ * On-device speech recognition (Milestone 4, TD-002): Whisper via
+ * sherpa-onnx — the exact engine and call pattern the owner already
+ * field-proved in his voice translator (its 1.13 ear). Fully
+ * offline; the manifest declares no INTERNET permission.
+ * The model is MEDIUM int8 since 0.9.0 (TD-015), by the owner's
+ * explicit decision reversing his 0.7.0 choice of small: he found
+ * small's word accuracy wanting and accepted medium's costs
+ * (~946 MB of model, slower decode) with the numbers in front of
+ * him. Only the model files changed; the pipeline below is the
+ * 0.7.0 pipeline untouched.
  *
  * The build fetches the AAR and the model into the APK assets (see
  * app/build.gradle.kts, fetchAsrDeps, SHA-256 pinned); here they are
@@ -56,17 +59,25 @@ class AsrEngine(private val context: Context) {
     /** Copy the model out of the assets once; verify exact sizes. */
     private fun materializeModels(): Triple<File, File, File> {
         modelFiles?.let { return it }
-        val dir = File(context.filesDir, "asr/whisper-small")
+        val dir = File(context.filesDir, "asr/whisper-medium")
         dir.mkdirs()
+        // 0.9.0 (TD-015): the retired small model of 0.5.0-0.8.0 is
+        // deleted here so its ~375 MB does not stay orphaned on
+        // the phone; after the first run this is a no-op.
+        try {
+            File(context.filesDir, "asr/whisper-small").deleteRecursively()
+        } catch (e: Exception) {
+            // Cleanup is best-effort; it never blocks transcription.
+        }
         val specs = listOf(
-            "small-encoder.int8.onnx" to 112_442_483L,
-            "small-decoder.int8.onnx" to 262_226_114L,
-            "small-tokens.txt" to 816_730L
+            "medium-encoder.int8.onnx" to 374_196_283L,
+            "medium-decoder.int8.onnx" to 571_059_257L,
+            "medium-tokens.txt" to 816_730L
         )
         for ((name, size) in specs) {
             val f = File(dir, name)
             if (!f.exists() || f.length() != size) {
-                context.assets.open("models/whisper-small/$name").use { inp ->
+                context.assets.open("models/whisper-medium/$name").use { inp ->
                     f.outputStream().use { out -> inp.copyTo(out, 1 shl 16) }
                 }
                 require(f.length() == size) { "model copy failed: $name" }
@@ -81,11 +92,11 @@ class AsrEngine(private val context: Context) {
 
     /** Copy the silero VAD model out of the assets once (0.5.1). */
     private fun materializeVad(): File {
-        val dir = File(context.filesDir, "asr/whisper-small")
+        val dir = File(context.filesDir, "asr/whisper-medium")
         dir.mkdirs()
         val f = File(dir, "silero_vad.onnx")
         if (!f.exists() || f.length() != VAD_SIZE) {
-            context.assets.open("models/whisper-small/silero_vad.onnx").use { inp ->
+            context.assets.open("models/whisper-medium/silero_vad.onnx").use { inp ->
                 f.outputStream().use { out -> inp.copyTo(out, 1 shl 16) }
             }
             require(f.length() == VAD_SIZE) { "vad copy failed" }

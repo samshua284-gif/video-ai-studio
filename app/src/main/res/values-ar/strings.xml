@@ -3,6 +3,7 @@
     <string name="app_name">استوديو الفيديو بالذكاء الاصطناعي</string>
     <string name="dashboard_tagline">من أول قصّ إلى المشاركة النهائية، بحرية تامة.</string>
     <string name="nav_home">الرئيسية</string>
+    <string name="nav_projects">المشاريع</string>
     <string name="home_hero_a">استوديو الفيديو</string>
     <string name="home_hero_b">الاحترافي</string>
     <string name="home_hero_sub">جميع أدوات الفيديو في مكان واحد</string>
@@ -144,7 +145,7 @@
     <string name="m5_tgt_lang">الترجمة إلى</string>
     <string name="m5_start">بدء الترجمة</string>
     <string name="m5_loading_model">جارٍ تحميل نموذج الترجمة (المرة الأولى تأخذ وقتًا)…</string>
-    <string name="m5_translating">جارٍ ترجمة الجزء %1$d من %2$d…</string>
+    <string name="m5_translating">جارٍ ترجمة الجزء %1$d من %2$d (%3$d%%)…</string>
     <string name="m5_flags">⚠ أرقام %1$d جزءًا لم تنجُ في الترجمة كما هي — راجعها في النص: الأجزاء %2$s</string>
     <string name="m5_memory_note">الأجزاء التي صحّحتها من قبل تُقدَّم من ذاكرة تصحيحك تلقائيًا.</string>
     <string name="m5_export_srt">تصدير الترجمات المترجمة (SRT)</string>
@@ -165,4 +166,21 @@
     <string name="m5_howto_3">اختر لغة المصدر واللغة المراد الترجمة إليها، ثم اضغط «بدء الترجمة». العمل يجري في الخلفية مع إشعار، كما في التفريغ.</string>
     <string name="m5_howto_4">التوقيتات لا تتغير أبدًا: كل سطر مترجم يحتفظ بتوقيته الأصلي، فيطابق ملف SRT المترجم الفيلم مباشرة.</string>
     <string name="m5_howto_5">عند الانتهاء يُحفظ ملفا SRT وTXT المترجمان تلقائيًا في التنزيلات. وسطر ⚠ تحت النتيجة يسمّي أي جزء تحتاج أرقامه مراجعتك. عدّل النص قبل التصدير إن شئت — تعديلاتك تُحفظ في ذاكرة تصحيحك وتُقدَّم لك عند تكرار الجزء نفسه مستقبلًا.</string>
+    <string name="proj_title">مشاريعي</string>
+    <string name="proj_empty">لا أعمال محفوظة بعد. الأعمال التي تحفظها من الأدوات ستظهر هنا.</string>
+    <string name="proj_file_missing">لم يعد الملف موجودًا</string>
+    <string name="proj_open">فتح</string>
+    <string name="proj_share">مشاركة</string>
+    <string name="proj_delete_file">حذف</string>
+    <string name="proj_remove_entry">إزالة من القائمة</string>
+    <string name="proj_from">من: %1$s</string>
+    <string name="proj_kind_mp3">استخراج الصوت</string>
+    <string name="proj_kind_transcript">تفريغ</string>
+    <string name="proj_kind_translation">ترجمة</string>
+    <string name="proj_kind_enhanced">تحسين الصوت</string>
+    <string name="proj_kind_trim">قصّ</string>
+    <string name="proj_kind_compress">ضغط</string>
+    <string name="m4_audio_library">الصوتيات على هذا الجهاز</string>
+    <string name="m4_audio_library_empty">لم يتم العثور على ملفات صوتية على هذا الجهاز.</string>
+    <string name="m4_system_picker">منتقي النظام</string>
 </resources>

@@ -54,6 +54,8 @@ import com.hilalsameer.videoaistudio.TranslateService
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
 import com.hilalsameer.videoaistudio.media.MtLanguages
+import com.hilalsameer.videoaistudio.media.ProjectKind
+import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.SrtParser
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.SubtitleMerge
@@ -187,6 +189,12 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     context.contentResolver.openOutputStream(dest)?.use { out ->
                         file.inputStream().use { it.copyTo(out, 1 shl 16) }
                     }
+                    // 0.9.0 (TD-016): the copy finished — the work
+                    // joins Projects under the picked document.
+                    ProjectsRepository.register(
+                        context, ProjectKind.TRANSLATION, file.name,
+                        dest.toString(), sourceName
+                    )
                 } catch (e: Exception) { }
             }
         }
@@ -411,9 +419,10 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
             }
             is TranslateJobState.Translating -> {
                 val frac = if (j.total > 0) j.done.toFloat() / j.total else 0f
+                val pct = if (j.total > 0) j.done * 100 / j.total else 0
                 LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
                 Text(
-                    stringResource(R.string.m5_translating, j.done, j.total),
+                    stringResource(R.string.m5_translating, j.done, j.total, pct),
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 TextButton(onClick = { TranslateService.cancel(context) }) {

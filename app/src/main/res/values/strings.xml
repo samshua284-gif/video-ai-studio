@@ -3,6 +3,7 @@
     <string name="app_name">Video AI Studio</string>
     <string name="dashboard_tagline">From cut to final share, crafted freely.</string>
     <string name="nav_home">Home</string>
+    <string name="nav_projects">Projects</string>
     <string name="home_hero_a">Video AI</string>
     <string name="home_hero_b">Studio</string>
     <string name="home_hero_sub">All your video tools in one place</string>
@@ -144,7 +145,7 @@
     <string name="m5_tgt_lang">Translate to</string>
     <string name="m5_start">Start translation</string>
     <string name="m5_loading_model">Loading the translation model (first time takes a while)…</string>
-    <string name="m5_translating">Translating part %1$d of %2$d…</string>
+    <string name="m5_translating">Translating part %1$d of %2$d (%3$d%%)…</string>
     <string name="m5_flags">⚠ The numbers in %1$d part(s) did not survive translation intact — check them in the text: parts %2$s</string>
     <string name="m5_memory_note">Segments you corrected before are served from your correction memory automatically.</string>
     <string name="m5_export_srt">Export translated subtitles (SRT)</string>
@@ -165,4 +166,21 @@
     <string name="m5_howto_3">Choose the source language and the language to translate to, then press Start translation. The work runs in the background with a notification, like transcription.</string>
     <string name="m5_howto_4">Timestamps never change: every translated line keeps its original timing, so the translated SRT matches the film directly.</string>
     <string name="m5_howto_5">When it finishes, the translated SRT and TXT are saved automatically to Downloads. A ⚠ line under the result names any part whose numbers need your check. Edit the text before exporting if you wish — your edits are remembered and served back to you on identical future segments.</string>
+    <string name="proj_title">My Projects</string>
+    <string name="proj_empty">No saved works yet. Works you save from the tools will appear here.</string>
+    <string name="proj_file_missing">The file no longer exists</string>
+    <string name="proj_open">Open</string>
+    <string name="proj_share">Share</string>
+    <string name="proj_delete_file">Delete</string>
+    <string name="proj_remove_entry">Remove from list</string>
+    <string name="proj_from">From: %1$s</string>
+    <string name="proj_kind_mp3">MP3 extraction</string>
+    <string name="proj_kind_transcript">Transcription</string>
+    <string name="proj_kind_translation">Translation</string>
+    <string name="proj_kind_enhanced">Audio enhancement</string>
+    <string name="proj_kind_trim">Trim</string>
+    <string name="proj_kind_compress">Compression</string>
+    <string name="m4_audio_library">Audio on this device</string>
+    <string name="m4_audio_library_empty">No audio files were found on this device.</string>
+    <string name="m4_system_picker">System picker</string>
 </resources>

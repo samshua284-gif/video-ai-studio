@@ -38,9 +38,9 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.ContentCut
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hd
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Mic
@@ -89,6 +89,7 @@ import com.hilalsameer.videoaistudio.data.inspectVideo
 import com.hilalsameer.videoaistudio.ui.AudioKind
 import com.hilalsameer.videoaistudio.ui.AudioToolScreen
 import com.hilalsameer.videoaistudio.ui.MediaToolScreen
+import com.hilalsameer.videoaistudio.ui.ProjectsScreen
 import com.hilalsameer.videoaistudio.ui.ToolKind
 import com.hilalsameer.videoaistudio.ui.TranscribeToolScreen
 import com.hilalsameer.videoaistudio.ui.TranslateToolScreen
@@ -114,7 +115,11 @@ val TOOLS = listOf(
     Tool(R.string.tool_audio, 3),
     Tool(R.string.tool_batch, 8),
     Tool(R.string.tool_queue, 8),
-    Tool(R.string.tool_history, 8),
+    // 0.9.0 (TD-016): the history card became «مشاريعي» — the
+    // registry of completed works is the history of what was
+    // produced, and it is real now, so the milestone tag is gone
+    // (milestone 0 renders no tag).
+    Tool(R.string.proj_title, 0),
     Tool(R.string.tool_settings, 9)
 )
 
@@ -197,6 +202,10 @@ fun StudioApp() {
                 9 -> AudioToolScreen(AudioKind.ENHANCE, state, onBack = { nav.popBackStack() })
                 4 -> TranscribeToolScreen(state, onBack = { nav.popBackStack() })
                 5 -> TranslateToolScreen(state, onBack = { nav.popBackStack() })
+                12 -> ProjectsScreen(
+                    onBack = { nav.popBackStack() },
+                    onSettings = { nav.navigate("tool/13") }
+                )
                 else -> ToolStatusScreen(tool = TOOLS[idx], onBack = { nav.popBackStack() })
             }
         }
@@ -222,7 +231,7 @@ val TOOL_ICONS: List<ImageVector> = listOf(
     Icons.Filled.VolumeUp,
     Icons.Filled.Layers,
     Icons.Filled.Assignment,
-    Icons.Filled.History,
+    Icons.Filled.Folder,
     Icons.Filled.Settings
 )
 
@@ -284,6 +293,9 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     BottomNavItem(Icons.Filled.Home, stringResource(R.string.nav_home), true) {}
+                    BottomNavItem(
+                        Icons.Filled.Folder, stringResource(R.string.nav_projects), false
+                    ) { onTool(12) }
                     BottomNavItem(
                         Icons.Filled.Settings, stringResource(R.string.tool_settings), false
                     ) { onTool(13) }
@@ -423,12 +435,14 @@ fun DashboardScreen(state: StudioState, onVideoReady: () -> Unit, onTool: (Int) 
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            Text(
-                                text = "M${tool.milestone}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
+                            if (tool.milestone > 0) {
+                                Text(
+                                    text = "M${tool.milestone}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.padding(top = 4.dp)
+                                )
+                            }
                         }
                     }
                 }

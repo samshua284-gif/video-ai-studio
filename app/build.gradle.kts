@@ -17,8 +17,8 @@ android {
         applicationId = "com.hilalsameer.videoaistudio"
         minSdk = 26
         targetSdk = 34
-        versionCode = 44
-        versionName = "0.8.0"
+        versionCode = 45
+        versionName = "0.9.0"
         ndk {
             // FFmpegKit ships four ABIs; his devices are ARM — keep the
             // APK lean and skip x86/x86_64 (TD-001).
@@ -44,7 +44,7 @@ android {
     sourceSets {
         getByName("main") {
             // Milestone 4 model files, fetched by fetchAsrDeps into
-            // build/asrdeps (models/whisper-small/…) — see below.
+            // build/asrdeps (models/whisper-medium/…) — see below.
             assets.srcDir("build/asrdeps")
             // Milestone 5 translation engine + NLLB model, fetched
             // by fetchMtDeps into build/mtdeps (mt/engines/…).
@@ -101,14 +101,16 @@ dependencies {
 }
 
 // ---------------------------------------------------------------------------
-// Milestone 4 — build-time fetches (sherpa-onnx AAR + Whisper-small model).
+// Milestone 4 — build-time fetches (sherpa-onnx AAR + Whisper model).
 //
 // The project's source channel carries text only, so these binaries cannot
 // be committed; and TD-002 forbids the shipped app from touching the
 // network while explicitly allowing the builder side to use it (the same
 // way FFmpegKit arrives from Maven in CI). Every artifact is verified by
-// SHA-256 against the exact files the owner field-proved in his voice
-// translator (sherpa-onnx 1.12.40 + whisper-small int8, its 1.13 ear).
+// SHA-256 against pinned files (sherpa-onnx 1.12.40, the AAR the owner
+// field-proved in his voice translator; the Whisper model is MEDIUM int8
+// since 0.9.0, TD-015 — the owner's explicit decision reversing his 0.7.0
+// choice of small, its hashes computed from the verified local copies).
 // A mismatch fails the build loudly — a corrupt model never ships.
 // ---------------------------------------------------------------------------
 
@@ -136,26 +138,27 @@ val fetchAsrDeps by tasks.registering {
                 "a7699d6a2e638a38791b2459cb0099c7577e6e5fca6b8ae916742c872a618b82"
             ),
             Triple(
-                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-encoder.int8.onnx",
-                "models/whisper-small/small-encoder.int8.onnx",
-                "4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9"
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/medium-encoder.int8.onnx",
+                "models/whisper-medium/medium-encoder.int8.onnx",
+                "1c54582b4d829de0089f6cb63bbbdb3bf7555398bacaf855fbecf1a84dfd193e"
             ),
             Triple(
-                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-decoder.int8.onnx",
-                "models/whisper-small/small-decoder.int8.onnx",
-                "acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee"
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/medium-decoder.int8.onnx",
+                "models/whisper-medium/medium-decoder.int8.onnx",
+                "595d00a338a365a7bfa0ca7f296cabc639583bef770ab6130df90f49a6412747"
             ),
             Triple(
-                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main/small-tokens.txt",
-                "models/whisper-small/small-tokens.txt",
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/tokens.txt",
+                "models/whisper-medium/medium-tokens.txt",
                 "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
             ),
             // 0.5.1: silero VAD for the speech gate (TD-008) — the
             // sherpa project's own release asset, hash-pinned like
-            // everything else here.
+            // everything else here. Since 0.9.0 it ships inside the
+            // whisper-medium folder, where AsrEngine/VadSpans read it.
             Triple(
                 "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
-                "models/whisper-small/silero_vad.onnx",
+                "models/whisper-medium/silero_vad.onnx",
                 "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
             )
         )

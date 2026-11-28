@@ -17,6 +17,8 @@ import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
 import com.hilalsameer.videoaistudio.media.MtEngine
+import com.hilalsameer.videoaistudio.media.ProjectKind
+import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.MtLanguages
 import com.hilalsameer.videoaistudio.media.SrtParser
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
@@ -72,6 +74,11 @@ class TranslateService : Service() {
     private val cancelFlag = AtomicBoolean(false)
     private var mt: MtEngine? = null
     private var lastNotifMs = 0L
+    // 0.9.0 (TD-017): progress notifications advance on whole
+    // percent changes, not on a clock — a 113-cue file used to
+    // leave the owner staring at a notification that told him
+    // nothing about how far along the job was.
+    private var lastNotifPct = -1
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -106,6 +113,7 @@ class TranslateService : Service() {
                 val src = intent.getStringExtra(EXTRA_SRC) ?: "en"
                 val tgt = intent.getStringExtra(EXTRA_TGT) ?: "ar"
                 cancelFlag.set(false)
+                lastNotifPct = -1
                 startForeground(
                     NOTIF_ID,
                     buildNotification(getString(R.string.m5_notif_running), null, null)
@@ -173,8 +181,9 @@ class TranslateService : Service() {
                 out.add(AsrSegment(seg.startSec, seg.endSec, translated))
                 state.value = TranslateJobState.Translating(i + 1, source.size)
                 acquireWakeLock()
+                val pct = (i + 1) * 100 / source.size
                 updateNotification(
-                    getString(R.string.m5_translating, i + 1, source.size),
+                    getString(R.string.m5_translating, i + 1, source.size, pct),
                     i + 1, source.size
                 )
             }
@@ -242,15 +251,25 @@ class TranslateService : Service() {
     }
 
     private fun updateNotification(text: String, progress: Int?, max: Int?) {
-        val now = System.currentTimeMillis()
-        if (now - lastNotifMs < 1000L) return
-        lastNotifMs = now
+        if (progress != null && max != null && max > 0) {
+            // TD-017: progress updates fire on whole-percent
+            // changes only — at most 100 notifications per job,
+            // each one carrying a number the owner can act on.
+            val pct = progress * 100 / max
+            if (pct == lastNotifPct) return
+            lastNotifPct = pct
+        } else {
+            val now = System.currentTimeMillis()
+            if (now - lastNotifMs < 1000L) return
+            lastNotifMs = now
+        }
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID, buildNotification(text, progress, max))
     }
 
     private fun updateNotificationForce(text: String) {
         lastNotifMs = System.currentTimeMillis()
+        lastNotifPct = -1
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID, buildNotification(text, null, null))
     }
@@ -262,14 +281,25 @@ class TranslateService : Service() {
         if (segments.isEmpty()) return false
         if (Build.VERSION.SDK_INT < 29) return false
         val base = SubtitleFormat.exportBaseName(name, title)
+        val srtName = base + "_" + tgt + "_subtitles.srt"
+        val txtName = base + "_" + tgt + "_transcript.txt"
         return try {
-            writeDownload(
-                base + "_" + tgt + "_subtitles.srt", "application/x-subrip",
+            val srtUri = writeDownload(
+                srtName, "application/x-subrip",
                 SubtitleFormat.buildSrt(segments)
             )
-            writeDownload(
-                base + "_" + tgt + "_transcript.txt", "text/plain",
+            val txtUri = writeDownload(
+                txtName, "text/plain",
                 SubtitleFormat.buildTxt(segments)
+            )
+            // 0.9.0 (TD-016): completed auto-saves join Projects.
+            ProjectsRepository.register(
+                applicationContext, ProjectKind.TRANSLATION,
+                srtName, srtUri.toString(), name
+            )
+            ProjectsRepository.register(
+                applicationContext, ProjectKind.TRANSLATION,
+                txtName, txtUri.toString(), name
             )
             true
         } catch (e: Exception) {
@@ -277,7 +307,7 @@ class TranslateService : Service() {
         }
     }
 
-    private fun writeDownload(displayName: String, mime: String, content: String) {
+    private fun writeDownload(displayName: String, mime: String, content: String): android.net.Uri {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, displayName)
             put(MediaStore.Downloads.MIME_TYPE, mime)
@@ -293,6 +323,7 @@ class TranslateService : Service() {
         values.clear()
         values.put(MediaStore.Downloads.IS_PENDING, 0)
         resolver.update(uri, values, null, null)
+        return uri
     }
 
     private fun postFinalNotification(text: String, icon: Int) {
