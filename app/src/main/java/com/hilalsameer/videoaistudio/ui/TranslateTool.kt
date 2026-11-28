@@ -468,6 +468,19 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.height(6.dp))
                 }
+                if (j.passedSegments > 0) {
+                    // TD-020: pass-throughs are stated, never
+                    // left for the owner to discover by reading.
+                    Text(
+                        stringResource(
+                            R.string.m5_passed_warning,
+                            j.passedSegments, j.segments.size
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 Text(
                     stringResource(R.string.m5_memory_note),
                     style = MaterialTheme.typography.bodySmall,

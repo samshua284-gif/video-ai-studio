@@ -782,3 +782,137 @@ and `m4_autosave_note` making the same false claim but with
 zero usages left in the tree — both removed from both
 locales. The m5 strings were NOT touched: translation
 auto-save still exists, so its claims remain true.
+
+## TD-020 — Translation confesses, transcription counts, input preview (0.9.2, 2026-11-28)
+
+**Field fact that forced this release.** TD-019's headline
+fix is FIELD-PROVEN on the owner's phone: the NLLB model
+loads with its file counter running, a 118-cue EN→AR job
+ran to completion and auto-saved — the first end-to-end
+translation completion in the tool's history. But the
+saved output was the English source verbatim for every
+segment: every unit had fallen into the worker's
+completeness guard (two empty attempts → pass the source
+through visibly). Static comparison against the owner's
+field-proven voice translator showed the whole chain
+identical — worker file, transformers.min.js sha, the 7
+pinned model files, the bridge protocol, the FLORES
+language mapping, CorrectionMemory, the service loop — so
+the failure lives inside the worker's per-unit generation
+on his device, and it was INVISIBLE because
+`translateOnce` swallowed the real error
+(`.catch(function () { return ''; })`) and an empty
+`translation_text` is indistinguishable from an exception.
+0.9.2 is a diagnostic + honesty release: it makes the
+engine confess. It does NOT fix the empty translations —
+no speculative cure is attempted; the cure ships in a
+later version once the real error is known, and the
+owner's screenshot of the new Failed message is the input
+to that root-cause fix.
+
+1. **The worker stops swallowing** (`mt-worker.js`).
+`translateOnce` now resolves `{text, error}`: an exception
+is recorded as `name + ': ' + message`; a resolved-but-
+empty `translation_text` stays EMPTY with error null. Each
+unit therefore ends in exactly one of three outcomes —
+OK (non-empty translation), EMPTY (pipe resolved, no
+text), ERROR (pipe threw). The completeness guard's
+behaviour is byte-for-byte the old behaviour (retry once
+on empty/error, then pass the source unit through);
+only its bookkeeping changed. `mt-done` gains
+`diagnostics: {unitsTotal, unitsOk, unitsPassed,
+firstError, srcLang, tgtLang}` — unitsPassed counts units
+whose final result is the passed-through source, firstError
+is the first recorded exception string of the request or
+null when every failure was EMPTY-only, and the languages
+are echoed back exactly as received so a mapping fault
+would be visible too. `mt-partial` is unchanged.
+
+2. **Bridge + service aggregate honestly.** `MtEngine`
+returns a `MtResult` (text + the six diagnostics fields);
+the pending-deferred plumbing carries it; a missing
+diagnostics object degrades to zeros/nulls — nothing is
+invented — and whole-request `mt-error` behaviour is
+unchanged. `TranslateService` aggregates across the job
+(segmentsTotal, fully-passed, partially-passed, first
+non-null firstError). Segments served from
+CorrectionMemory are NOT pass-throughs and count in
+neither bucket, only in the total. The end-of-job
+decision is a pure function, `TranslateOutcome.outcome`
+in `TranslateFix.kt`:
+   - every engine-served segment fully passed → **Failed**,
+     never a fake Done: the message states plainly that
+     every part came back untranslated, plus the firstError
+     verbatim when one exists, or the fact that the engine
+     reported no error and every result was empty. A
+     Failed job is NOT auto-saved.
+   - some segments fully or partially passed → Done as
+     before (auto-save kept), PLUS a visible warning line
+     on the Done screen and in the final notification with
+     the owner's prescribed count text («مرّت X من Y مقاطع
+     دون ترجمة — بقي نصها الأصلي كما هو»).
+   - none passed → Done clean, exactly as before.
+   New strings both locales: `m5_err_all_passed`,
+   `m5_err_all_empty`, `m5_passed_warning`.
+
+3. **Transcription percent** (owner's field report on
+0.9.1, same visibility family as TD-017). Medium Arabic
+quality was judged «جميل», but «لا يظهر عداد التقدم»:
+`m4_transcribing` never got the percent TD-017 gave
+translation, and `m4_extracting` showed a bar fraction
+with no number. Both strings now carry the percent
+(transcribing mirrors `m5_translating` exactly;
+extracting takes the existing fraction ×100, rounded),
+and every call site — tool UI and both service
+notifications — passes it. **Known limit, stated plainly:
+no sub-chunk progress is fabricated.** Sherpa decodes a
+whole speech chunk per call, so the percent counts
+completed chunks exactly as translation counts completed
+cues; a 24-second clip is ONE chunk and reads 0% then
+100%.
+
+4. **Input preview player** (owner's explicit order,
+screenshot-backed: he imported a WhatsApp voice note,
+AUD-20260913-WA0002.opus, and found no way to hear it).
+In the Transcribe tool's loaded state, under the input
+card: Play/Pause («استماع» / «إيقاف مؤقت»), Stop, and an
+elapsed/total readout refreshed while playing. Audio
+plays through a platform MediaPlayer prepared from the
+imported content URI; a file carrying a video track —
+decided by its own inspection (`VideoInfo.videoMime`),
+never by file extension — also shows its picture in a
+bounded VideoView with the same controls. Works with
+content:// URIs from both the in-app chooser and the
+system picker. Lifecycle discipline: the player is
+released when the input changes or the screen leaves
+composition, and paused when a transcription job starts.
+A prepare/decode failure (an exotic codec) shows one
+honest line («تعذّر تشغيل هذا الملف») — the VideoView
+error listener returns true so the platform's own dialog
+never appears — and can never crash or block
+transcription. New strings: `m4_preview_play`,
+`m4_preview_pause`, `m4_preview_stop`, `m4_preview_failed`.
+**Phone-only verification, stated honestly: opus decode,
+VideoView rendering and the lifecycle on the owner's
+Samsung can only be proven on his device; the code is
+type-checked locally and in CI, playback itself is
+IMPLEMENTED — NOT VERIFIED until his field test.**
+
+**Verification.** Worker JS: `node --check` clean, plus a
+node harness running the REAL shipped worker against a
+stubbed pipeline — 18/18 (mixed OK/EMPTY/ERROR request:
+unitsTotal 3, unitsOk 1, unitsPassed 2,
+firstError "TypeError: stub boom", languages echoed,
+pass-through text preserved; EMPTY-only → firstError
+null; all-OK → clean). `TranslateOutcome`: host harness
+8/8 and a JUnit twin (8 tests) in CI's
+testDebugUnitTest. Existing suites re-run green:
+SpeechChunks 32/32, SpeechGate ALL PASS, Projects 16/16,
+MtLoadTracker + AbortableAwait 14/14. Full local
+type-check of all 35 app sources with the Compose
+compiler plugin: zero errors. Strings parity 187/187
+exact key sets; aapt2 compiles both locales clean; the
+manifest still carries no INTERNET permission.
+Translation semantics, the module-worker fix,
+AbortableAwait, MtLoadTracker, Projects, medium ASR,
+all save behaviour and timestamps are untouched.

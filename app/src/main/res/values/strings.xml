@@ -115,8 +115,12 @@
     <string name="m4_notif_done">Transcription complete — the text is ready in the app.</string>
     <string name="m4_cancelling">Stopping…</string>
     <string name="m4_notif_failed">Transcription failed — open the app for details.</string>
-    <string name="m4_extracting">Extracting the audio…</string>
-    <string name="m4_transcribing">Transcribing part %1$d of %2$d…</string>
+    <string name="m4_extracting">Extracting the audio… (%1$d%%)</string>
+    <string name="m4_transcribing">Transcribing part %1$d of %2$d (%3$d%%)…</string>
+    <string name="m4_preview_play">Listen</string>
+    <string name="m4_preview_pause">Pause</string>
+    <string name="m4_preview_stop">Stop</string>
+    <string name="m4_preview_failed">This file could not be played.</string>
     <string name="m4_result">Transcript</string>
     <string name="m4_segments">%1$d parts · speech ends at %2$s</string>
     <string name="m4_no_speech">No speech was recognized in this video.</string>
@@ -154,6 +158,9 @@
     <string name="m5_err_empty">No readable subtitle parts were found.</string>
     <string name="m5_err_language">Unsupported language pair.</string>
     <string name="m5_err_model">The translation model failed to load</string>
+    <string name="m5_err_all_passed">Every part came back untranslated — the engine produced no translation for any of them</string>
+    <string name="m5_err_all_empty">The engine reported no error — every result it returned was empty.</string>
+    <string name="m5_passed_warning">%1$d of %2$d parts passed through untranslated — their original text was kept as is.</string>
     <string name="m5_notif_running">Translation starting…</string>
     <string name="m5_notif_loading">Loading the translation model…</string>
     <string name="m5_notif_done">Translation complete — open the app to see and export it.</string>

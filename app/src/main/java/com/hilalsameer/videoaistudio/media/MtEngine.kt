@@ -31,6 +31,29 @@ object MtLanguages {
 }
 
 /**
+ * One segment's translation plus the worker's own account of
+ * it (0.9.2, TD-020). Until 0.9.1 the bridge carried only the
+ * text, and a segment whose every unit had failed came back as
+ * its own source text — indistinguishable from a translation.
+ * Now the worker reports how its units fared: [unitsTotal]
+ * units in the segment, [unitsOk] really translated,
+ * [unitsPassed] passed through untranslated by the guard, and
+ * [firstError] — the first real exception the engine hit
+ * ("name: message"), or null when every failure was an empty
+ * result rather than an error. [srcLang]/[tgtLang] are the
+ * FLORES codes the worker echoes back as actually received.
+ */
+data class MtResult(
+    val text: String,
+    val unitsTotal: Int,
+    val unitsOk: Int,
+    val unitsPassed: Int,
+    val firstError: String?,
+    val srcLang: String?,
+    val tgtLang: String?
+)
+
+/**
  * Offline machine translation (Milestone 5): NLLB-200-distilled-
  * 600M running in Transformers.js inside a hidden WebView — the
  * exact stack the owner's voice translator field-proved, model and
@@ -42,8 +65,10 @@ object MtLanguages {
  *
  * The worker translates sentence-by-sentence with a completeness
  * guard (see mt-worker.js): an empty unit result is retried once,
- * then the source unit passes through visibly. This class only
- * moves requests and results across the bridge.
+ * then the source unit passes through visibly. This class moves
+ * requests and results across the bridge — and, since TD-020,
+ * the worker's per-request diagnostics with them, so a passed-
+ * through segment can never again masquerade as a translation.
  */
 class MtEngine(private val appContext: Context) {
 
@@ -71,7 +96,7 @@ class MtEngine(private val appContext: Context) {
     @Volatile
     private var loadPoisoned = false
 
-    private val pending = ConcurrentHashMap<Int, CompletableDeferred<String>>()
+    private val pending = ConcurrentHashMap<Int, CompletableDeferred<MtResult>>()
     private val nextId = AtomicInteger(1)
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -189,17 +214,21 @@ class MtEngine(private val appContext: Context) {
 
     /** Translates one segment's text. The worker splits it into
      *  sentences and guards each one; the returned text is never
-     *  silently empty for non-empty input. Throws on bridge or
-     *  engine failure — the caller decides the job's fate. */
+     *  silently empty for non-empty input. The [MtResult] also
+     *  carries the worker's diagnostics (TD-020) — how many of
+     *  the segment's units really translated, how many passed
+     *  through, and the first real engine error, if any. Throws
+     *  on bridge or whole-request engine failure — the caller
+     *  decides the job's fate. */
     suspend fun translate(
         text: String, srcFlores: String, tgtFlores: String,
         shouldAbort: () -> Boolean = { false }
-    ): String {
+    ): MtResult {
         check(ensureLoaded(shouldAbort)) {
             "MT model failed to load: ${lastError ?: "unknown"}"
         }
         val id = nextId.getAndIncrement()
-        val d = CompletableDeferred<String>()
+        val d = CompletableDeferred<MtResult>()
         pending[id] = d
         post(
             JSONObject()
@@ -259,7 +288,27 @@ class MtEngine(private val appContext: Context) {
                 readyDeferred?.complete(false)
             }
             "mt-done" -> {
-                pending[o.optInt("id")]?.complete(o.optString("result"))
+                // TD-020: the diagnostics object rides with the
+                // result; a worker older than 0.9.2 would simply
+                // leave it absent, and the zeros/nulls below then
+                // say "unknown" without inventing counts.
+                val diag = o.optJSONObject("diagnostics")
+                val firstError = if (diag != null && !diag.isNull("firstError")) {
+                    diag.optString("firstError").takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
+                pending[o.optInt("id")]?.complete(
+                    MtResult(
+                        text = o.optString("result"),
+                        unitsTotal = diag?.optInt("unitsTotal", 0) ?: 0,
+                        unitsOk = diag?.optInt("unitsOk", 0) ?: 0,
+                        unitsPassed = diag?.optInt("unitsPassed", 0) ?: 0,
+                        firstError = firstError,
+                        srcLang = diag?.optString("srcLang")?.takeIf { it.isNotEmpty() },
+                        tgtLang = diag?.optString("tgtLang")?.takeIf { it.isNotEmpty() }
+                    )
+                )
             }
             "mt-error" -> {
                 val id = o.optInt("id")

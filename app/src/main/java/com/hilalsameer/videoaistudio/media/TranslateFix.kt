@@ -51,4 +51,54 @@ object TranslateFix {
         in '\u06F0'..'\u06F9' -> '0' + (ch - '\u06F0')   // Eastern Arabic ۰-۹
         else -> ch
     }
+
+    /** End-of-job verdict under the TD-020 honesty rule. */
+    sealed interface TranslateOutcome {
+        /** Every segment came back fully untranslated: the job
+         *  is a failure, never a success. [firstError] is the
+         *  first real engine exception of the job, or null when
+         *  every failure was an empty result with no error. */
+        data class FailedAllPassed(val firstError: String?) : TranslateOutcome
+
+        /** The job finished, but [passedSegments] of
+         *  [totalSegments] segments contain at least one unit
+         *  that passed through untranslated — the owner must be
+         *  told the count, on screen and in the notification. */
+        data class DoneWithWarning(
+            val passedSegments: Int, val totalSegments: Int
+        ) : TranslateOutcome
+
+        /** Nothing passed through: an ordinary clean finish. */
+        data object DoneClean : TranslateOutcome
+    }
+
+    /**
+     * TD-020 honesty rule, decided from the job's pass-through
+     * accounting. Counts cover ENGINE-served segments only:
+     * segments served from the owner's correction memory are
+     * his own past translations, never pass-throughs, and the
+     * service never counts them in either bucket — they only
+     * swell [segmentsTotal], which is exactly what keeps an
+     * all-memory job from being declared a failure.
+     *
+     * - [segmentsFullyPassed] == [segmentsTotal] (and total
+     *   > 0): every segment is its own source text → Failed.
+     * - Any fully or partially passed segment short of that:
+     *   Done, with the affected count carried for the warning.
+     * - None: Done clean.
+     */
+    fun outcome(
+        segmentsTotal: Int,
+        segmentsFullyPassed: Int,
+        segmentsPartiallyPassed: Int,
+        firstError: String?
+    ): TranslateOutcome = when {
+        segmentsTotal > 0 && segmentsFullyPassed >= segmentsTotal ->
+            TranslateOutcome.FailedAllPassed(firstError)
+        segmentsFullyPassed + segmentsPartiallyPassed > 0 ->
+            TranslateOutcome.DoneWithWarning(
+                segmentsFullyPassed + segmentsPartiallyPassed, segmentsTotal
+            )
+        else -> TranslateOutcome.DoneClean
+    }
 }

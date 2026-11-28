@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -127,7 +128,8 @@ class TranscribeService : Service() {
                     (ms.toFloat() / durationMs).coerceIn(0f, 1f)
                 } else 0f
                 state.value = TranscribeJobState.Extracting(frac)
-                updateNotification(getString(R.string.m4_extracting), (frac * 100).toInt(), 100)
+                val pct = (frac * 100).roundToInt()
+                updateNotification(getString(R.string.m4_extracting, pct), pct, 100)
             }
             if (extract.cancelled || cancelFlag.get()) {
                 finish(TranscribeJobState.Cancelled)
@@ -149,7 +151,11 @@ class TranscribeService : Service() {
                     state.value = TranscribeJobState.Transcribing(done, total)
                     acquireWakeLock()
                     updateNotification(
-                        getString(R.string.m4_transcribing, done, total), done, total
+                        getString(
+                            R.string.m4_transcribing, done, total,
+                            if (total > 0) done * 100 / total else 0
+                        ),
+                        done, total
                     )
                 },
                 { cancelFlag.get() }

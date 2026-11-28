@@ -48,7 +48,12 @@ sealed interface TranslateJobState {
         val source: List<AsrSegment>,
         val numberFlags: List<Int>,
         val inputName: String,
-        val autoSaved: Boolean = false
+        val autoSaved: Boolean = false,
+        /** Segments containing at least one unit that passed
+         *  through untranslated (TD-020) — 0 on a clean job;
+         *  the Done screen and the final notification both
+         *  state the count when it is not. */
+        val passedSegments: Int = 0
     ) : TranslateJobState
 
     data class Failed(val message: String) : TranslateJobState
@@ -72,6 +77,15 @@ sealed interface TranslateJobState {
  * numbers did not is FLAGGED in the result, never silently
  * rewritten. On completion the translated SRT + TXT are written
  * to Downloads automatically (0.5.4's rule, carried over).
+ *
+ * TD-020: the engine now reports per segment how many of its
+ * units really translated and how many passed through (see
+ * MtResult). The job aggregates those counts; if EVERY segment
+ * came back fully untranslated the job ends Failed with the
+ * engine's first real error — never as a fake success — and a
+ * partially passed job carries its count into the Done state
+ * and the final notification. Correction-memory segments are
+ * the owner's own words and never count as pass-throughs.
  */
 class TranslateService : Service() {
 
@@ -195,15 +209,33 @@ class TranslateService : Service() {
                     .toMap()
             val out = ArrayList<AsrSegment>(source.size)
             val flags = ArrayList<Int>()
+            // TD-020 pass-through accounting (engine-served
+            // segments only — correction-memory segments are
+            // the owner's own translations and never count).
+            var segmentsFullyPassed = 0
+            var segmentsPartiallyPassed = 0
+            var jobFirstError: String? = null
             for ((i, seg) in source.withIndex()) {
                 if (cancelFlag.get()) {
                     finish(TranslateJobState.Cancelled)
                     return
                 }
                 val fromMemory = CorrectionMemory.lookup(seg.text, memory)
-                val translated = fromMemory ?: engine.translate(
-                    seg.text, srcF, tgtF
-                ) { cancelFlag.get() }
+                val translated: String
+                if (fromMemory != null) {
+                    translated = fromMemory
+                } else {
+                    val r = engine.translate(
+                        seg.text, srcF, tgtF
+                    ) { cancelFlag.get() }
+                    translated = r.text
+                    if (jobFirstError == null) jobFirstError = r.firstError
+                    when {
+                        r.unitsTotal > 0 && r.unitsPassed >= r.unitsTotal ->
+                            segmentsFullyPassed++
+                        r.unitsPassed > 0 -> segmentsPartiallyPassed++
+                    }
+                }
                 if (!TranslateFix.numbersPreserved(seg.text, translated)) {
                     flags.add(i)
                 }
@@ -218,9 +250,42 @@ class TranslateService : Service() {
             }
             if (cancelFlag.get()) {
                 finish(TranslateJobState.Cancelled)
-            } else {
-                val saved = autoSave(name, title, tgt, out)
-                finish(TranslateJobState.Done(out, source, flags, name, saved))
+                return
+            }
+            // TD-020: the end-of-job honesty decision. A job in
+            // which every segment came back as its own source
+            // text is a FAILURE with the engine's first real
+            // error attached — it is not saved to Downloads and
+            // never presented as a completed translation.
+            when (val outcome = TranslateFix.outcome(
+                source.size, segmentsFullyPassed, segmentsPartiallyPassed,
+                jobFirstError
+            )) {
+                is TranslateFix.TranslateOutcome.FailedAllPassed -> {
+                    val message = buildString {
+                        append(getString(R.string.m5_err_all_passed))
+                        val err = outcome.firstError
+                        if (err != null) {
+                            append(": ").append(err)
+                        } else {
+                            append(" ").append(getString(R.string.m5_err_all_empty))
+                        }
+                    }
+                    finish(TranslateJobState.Failed(message))
+                }
+                is TranslateFix.TranslateOutcome.DoneWithWarning -> {
+                    val saved = autoSave(name, title, tgt, out)
+                    finish(
+                        TranslateJobState.Done(
+                            out, source, flags, name, saved,
+                            passedSegments = outcome.passedSegments
+                        )
+                    )
+                }
+                TranslateFix.TranslateOutcome.DoneClean -> {
+                    val saved = autoSave(name, title, tgt, out)
+                    finish(TranslateJobState.Done(out, source, flags, name, saved))
+                }
             }
         } catch (e: Exception) {
             if (cancelFlag.get()) {
@@ -235,13 +300,23 @@ class TranslateService : Service() {
         state.value = terminal
         releaseWakeLock()
         when (terminal) {
-            is TranslateJobState.Done -> postFinalNotification(
-                getString(
+            is TranslateJobState.Done -> {
+                var text = getString(
                     if (terminal.autoSaved) R.string.m5_notif_done_saved
                     else R.string.m5_notif_done
-                ),
-                android.R.drawable.stat_sys_download_done
-            )
+                )
+                // TD-020: the pass-through count is stated in
+                // the notification too, not only on the screen.
+                if (terminal.passedSegments > 0) {
+                    text += " " + getString(
+                        R.string.m5_passed_warning,
+                        terminal.passedSegments, terminal.segments.size
+                    )
+                }
+                postFinalNotification(
+                    text, android.R.drawable.stat_sys_download_done
+                )
+            }
             is TranslateJobState.Failed -> postFinalNotification(
                 getString(R.string.m5_notif_failed), android.R.drawable.stat_notify_error
             )

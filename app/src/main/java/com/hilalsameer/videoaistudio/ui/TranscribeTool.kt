@@ -5,13 +5,16 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaPlayer
 import android.net.Uri
+import android.widget.VideoView
 import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,18 +37,22 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.hilalsameer.videoaistudio.KEY_ASR_LANG
 import com.hilalsameer.videoaistudio.R
@@ -53,6 +60,7 @@ import com.hilalsameer.videoaistudio.STUDIO_PREFS
 import com.hilalsameer.videoaistudio.StudioState
 import com.hilalsameer.videoaistudio.TranscribeJobState
 import com.hilalsameer.videoaistudio.TranscribeService
+import com.hilalsameer.videoaistudio.data.VideoInfo
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
@@ -61,8 +69,10 @@ import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.exportsDir
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 import java.io.File
 
 /**
@@ -93,6 +103,193 @@ fun ImportRow(onVideo: () -> Unit, onAudio: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+/**
+ * 0.9.2 (TD-020): listen to — or watch — the imported file
+ * BEFORE transcribing it. The owner's field order: he imported
+ * a WhatsApp voice note and had no way to hear what he had
+ * picked. Audio plays through a plain MediaPlayer prepared
+ * from the imported content URI; a file that carries a video
+ * track — decided by its own inspection ([VideoInfo.videoMime]),
+ * never by its file name — also shows its picture in a bounded
+ * VideoView. One player at a time, owned by this composable:
+ * released when the input changes or the screen leaves, and
+ * paused when a transcription job starts. A file the platform
+ * cannot decode gets one honest line and never blocks or
+ * crashes the transcription path.
+ */
+@Composable
+private fun InputPreview(info: VideoInfo, jobActive: Boolean) {
+    val context = LocalContext.current
+    val uri = info.uri
+    val isVideo = info.videoMime != null
+    var audioPlayer by remember(uri) { mutableStateOf<MediaPlayer?>(null) }
+    var videoView by remember(uri) { mutableStateOf<VideoView?>(null) }
+    var playing by remember(uri) { mutableStateOf(false) }
+    var failed by remember(uri) { mutableStateOf(false) }
+    var positionMs by remember(uri) { mutableIntStateOf(0) }
+
+    fun pausePlayback() {
+        try {
+            if (isVideo) videoView?.pause() else audioPlayer?.pause()
+        } catch (e: Exception) { }
+        playing = false
+    }
+
+    fun stopPlayback() {
+        try {
+            if (isVideo) {
+                videoView?.pause()
+                videoView?.seekTo(0)
+            } else {
+                audioPlayer?.pause()
+                audioPlayer?.seekTo(0)
+            }
+        } catch (e: Exception) { }
+        playing = false
+        positionMs = 0
+    }
+
+    fun toggle() {
+        if (failed) return
+        if (playing) {
+            pausePlayback()
+            return
+        }
+        if (isVideo) {
+            val vv = videoView ?: return
+            try {
+                vv.start()
+                playing = true
+            } catch (e: Exception) {
+                failed = true
+            }
+        } else {
+            val existing = audioPlayer
+            if (existing != null) {
+                try {
+                    existing.start()
+                    playing = true
+                } catch (e: Exception) {
+                    failed = true
+                }
+            } else {
+                try {
+                    val mp = MediaPlayer()
+                    mp.setDataSource(context, uri)
+                    mp.setOnPreparedListener { p ->
+                        try {
+                            p.start()
+                            playing = true
+                        } catch (e: Exception) {
+                            failed = true
+                        }
+                    }
+                    mp.setOnCompletionListener { p ->
+                        playing = false
+                        positionMs = 0
+                        try { p.seekTo(0) } catch (e: Exception) { }
+                    }
+                    mp.setOnErrorListener { _, _, _ ->
+                        failed = true
+                        playing = false
+                        true
+                    }
+                    mp.prepareAsync()
+                    audioPlayer = mp
+                } catch (e: Exception) {
+                    failed = true
+                }
+            }
+        }
+    }
+
+    // A starting job takes the owner's ears: pause the preview.
+    LaunchedEffect(jobActive) {
+        if (jobActive) pausePlayback()
+    }
+
+    // Elapsed-time readout, refreshed while playing.
+    LaunchedEffect(playing) {
+        while (playing) {
+            positionMs = try {
+                if (isVideo) videoView?.currentPosition ?: 0
+                else audioPlayer?.currentPosition ?: 0
+            } catch (e: Exception) {
+                0
+            }
+            delay(250)
+        }
+    }
+
+    DisposableEffect(uri) {
+        onDispose {
+            try { audioPlayer?.release() } catch (e: Exception) { }
+            audioPlayer = null
+            try { videoView?.stopPlayback() } catch (e: Exception) { }
+            videoView = null
+        }
+    }
+
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        if (isVideo) {
+            AndroidView(
+                factory = { ctx ->
+                    VideoView(ctx).also { vv ->
+                        videoView = vv
+                        vv.setVideoURI(uri)
+                        // Returning true also suppresses the
+                        // platform's own "cannot play" dialog —
+                        // the honest line below replaces it.
+                        vv.setOnErrorListener { _, _, _ ->
+                            failed = true
+                            playing = false
+                            true
+                        }
+                        vv.setOnCompletionListener {
+                            playing = false
+                            positionMs = 0
+                            try { vv.seekTo(0) } catch (e: Exception) { }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(220.dp)
+                    .background(Color.Black)
+            )
+            Spacer(Modifier.height(8.dp))
+        }
+        if (failed) {
+            Text(
+                stringResource(R.string.m4_preview_failed),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        } else {
+            Row {
+                Button(onClick = { toggle() }) {
+                    Text(
+                        stringResource(
+                            if (playing) R.string.m4_preview_pause
+                            else R.string.m4_preview_play
+                        )
+                    )
+                }
+                OutlinedButton(
+                    onClick = { stopPlayback() },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text(stringResource(R.string.m4_preview_stop))
+                }
+                Text(
+                    "${formatDuration(positionMs.toLong())} / " +
+                        formatDuration(info.durationMs),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(start = 12.dp, top = 10.dp)
+                )
+            }
         }
     }
 }
@@ -404,6 +601,16 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     Text(stringResource(R.string.m4_system_picker))
                 }
             }
+            // 0.9.2 (TD-020): hear — or watch — the imported
+            // file before transcribing it (the owner's order
+            // after importing a WhatsApp voice note).
+            InputPreview(
+                info = info,
+                jobActive = job is TranscribeJobState.Preparing ||
+                    job is TranscribeJobState.Extracting ||
+                    job is TranscribeJobState.Transcribing ||
+                    job is TranscribeJobState.Cancelling
+            )
         }
         Spacer(Modifier.height(8.dp))
 
@@ -458,7 +665,9 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             is TranscribeJobState.Extracting -> {
                 LinearProgressIndicator(progress = { j.fraction }, modifier = Modifier.fillMaxWidth())
                 Text(
-                    stringResource(R.string.m4_extracting),
+                    stringResource(
+                        R.string.m4_extracting, (j.fraction * 100).roundToInt()
+                    ),
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 TextButton(onClick = { TranscribeService.cancel(context) }) {
@@ -469,7 +678,10 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 val frac = if (j.total > 0) j.done.toFloat() / j.total else 0f
                 LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
                 Text(
-                    if (j.total > 0) stringResource(R.string.m4_transcribing, j.done, j.total)
+                    if (j.total > 0) stringResource(
+                        R.string.m4_transcribing, j.done, j.total,
+                        j.done * 100 / j.total
+                    )
                     else stringResource(R.string.m2_preparing),
                     modifier = Modifier.padding(top = 8.dp)
                 )
