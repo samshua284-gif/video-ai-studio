@@ -15,6 +15,15 @@ class FormatTest {
     }
 
     @Test
+    fun duration_formats_for_the_chunk_clock() {
+        // 0.9.5 (TD-023): formatDuration also renders the
+        // transcription chunk-elapsed clock (whole seconds in).
+        assertEquals("0:07", formatDuration(7_000))
+        assertEquals("10:00", formatDuration(600_000))
+        assertEquals("59:59", formatDuration(3_599_000))
+    }
+
+    @Test
     fun aspect_ratios() {
         assertEquals("16:9", aspectRatio(1920, 1080))
         assertEquals("9:16", aspectRatio(1080, 1920))

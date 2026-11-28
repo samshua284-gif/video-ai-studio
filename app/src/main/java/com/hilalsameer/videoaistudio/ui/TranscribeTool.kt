@@ -702,6 +702,23 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     else stringResource(R.string.m4_analysing),
                     modifier = Modifier.padding(top = 8.dp)
                 )
+                if (j.total > 0) {
+                    // 0.9.5 (TD-023): the live clock of the
+                    // chunk being decoded. A chunk is one
+                    // opaque native call with no internal
+                    // progress — the counter cannot move inside
+                    // it, but this number moves every second,
+                    // so working never looks frozen.
+                    Text(
+                        stringResource(
+                            R.string.m4_chunk_elapsed,
+                            formatDuration(j.chunkElapsedSec * 1000L)
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
                 TextButton(onClick = { TranscribeService.cancel(context) }) {
                     Text(stringResource(R.string.m2_cancel))
                 }
@@ -711,10 +728,10 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     CircularProgressIndicator()
                     Text("  " + stringResource(R.string.m4_cancelling))
                 }
-                // 0.9.4 (TD-022): the wait has a stated limit —
-                // a cancel lands at the first safe point, and
-                // saying so turns a seeming hang into a bounded
-                // wait the owner can read.
+                // 0.9.5 (TD-023): the line under the spinner
+                // states the new truth — the screen stops at
+                // once; only the detached decode finishes in
+                // the background, and its result is discarded.
                 Text(
                     stringResource(R.string.m4_cancelling_hint),
                     style = MaterialTheme.typography.bodySmall,

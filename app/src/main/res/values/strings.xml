@@ -119,7 +119,8 @@
     <string name="m4_transcribing">Transcribing part %1$d of %2$d (%3$d%%)…</string>
     <string name="m4_loading_engine">Loading the transcription model…</string>
     <string name="m4_analysing">Analysing the speech…</string>
-    <string name="m4_cancelling_hint">Stopping completes at the first safe point — a model load or a part being decoded is not cut in the middle.</string>
+    <string name="m4_cancelling_hint">The screen stops at once; any decoding in flight finishes in the background and its result is discarded.</string>
+    <string name="m4_chunk_elapsed">This part has been decoding for %1$s</string>
     <string name="m4_preview_play">Listen</string>
     <string name="m4_preview_pause">Pause</string>
     <string name="m4_preview_stop">Stop</string>

@@ -48,13 +48,35 @@ import kotlin.math.min
  * Honest limit, stated to the owner: a scream that sounds like a
  * human voice can pass the VAD gate — the gate separates voice
  * from non-voice, not shouting from talking.
+ *
+ * Threading (0.9.5, TD-023): the whisper recognizer's whole
+ * life — construction, every stream decode, its release — runs
+ * on the one decode thread owned by [DecodeCoordinator]; the
+ * job thread submits and polls, never touches sherpa whisper
+ * objects. A chunk decode is one long native call that cannot
+ * be interrupted, so a cancel ABANDONS the await instead: the
+ * screen frees within a poll slice, the orphan finishes on the
+ * decode thread and is discarded, and the recognizer is
+ * retired by the drain — never reused, and (via the
+ * coordinator's process gate) never one of two alive at once.
+ * The silero VAD stays on the job thread, as before: a separate
+ * object with its own cancel-aware pass.
  */
 class AsrEngine(private val context: Context) {
 
+    /** Touched only on the decode thread; the references are
+     *  volatile so the job thread may test them for the
+     *  already-built fast path without touching the objects. */
+    @Volatile
     private var recognizer: OfflineRecognizer? = null
+
+    @Volatile
     private var builtLang: String? = null
     private var modelFiles: Triple<File, File, File>? = null
     private var vad: Vad? = null
+
+    /** The detached-decode orchestration (0.9.5, TD-023). */
+    private val decode = DecodeCoordinator()
 
     /** Copy the model out of the assets once; verify exact sizes. */
     private fun materializeModels(): Triple<File, File, File> {
@@ -207,7 +229,9 @@ class AsrEngine(private val context: Context) {
         return rcfg
     }
 
-    /** Build once; a language change reconfigures in place (no rebuild). */
+    /** Build once; a language change reconfigures in place (no
+     *  rebuild). DECODE THREAD ONLY (0.9.5, TD-023): invoked
+     *  solely inside coordinator tasks, never by the job thread. */
     private fun recognizerFor(lang: String): OfflineRecognizer {
         val (enc, dec, tok) = materializeModels()
         val existing = recognizer
@@ -229,18 +253,51 @@ class AsrEngine(private val context: Context) {
 
     /**
      * Load the recognizer for [language] ahead of the job (0.9.4,
-     * TD-022). The model load — materializing ~946 MB of medium
-     * model on first use and building the sherpa recognizer — is
-     * the longest single wait in the pipeline, and until 0.9.4 it
-     * happened invisibly inside [transcribe], behind the generic
-     * "preparing" label. The service now runs it as its own named
-     * phase (LoadingEngine) and checks the cancel flag the moment
-     * it returns, before any VAD or decode work. Idempotent:
-     * exactly [recognizerFor]'s caching — a no-op when the
-     * recognizer for this language already exists.
+     * TD-022; detached in 0.9.5, TD-023). The model load —
+     * materializing ~946 MB of medium model on first use and
+     * building the sherpa recognizer — is the longest single
+     * wait in the pipeline, and until 0.9.4 it happened
+     * invisibly inside [transcribe], behind the generic
+     * "preparing" label. The service runs it as its own named
+     * phase (LoadingEngine) and checks the cancel flag the
+     * moment it returns, before any VAD or decode work.
+     *
+     * The construction itself runs on the decode thread and is
+     * awaited in cancel-poll slices: the native build cannot be
+     * cut, but the AWAIT can — a cancel during the load returns
+     * false here at once, and the construction completes on the
+     * decode thread into a ready-but-unused recognizer
+     * (harmless; released at engine close). Returns true when
+     * the recognizer stands ready. Idempotent: exactly
+     * [recognizerFor]'s caching — a no-op when the recognizer
+     * for this language already exists.
      */
-    fun prepare(language: String) {
-        recognizerFor(language)
+    fun prepare(language: String, isCancelled: () -> Boolean): Boolean {
+        return ensureRecognizer(language, isCancelled)
+    }
+
+    /**
+     * Bring the recognizer for [language] up on the decode
+     * thread, honouring the coordinator's invariants: wait out
+     * a drain on this engine, take the process gate (at most
+     * one recognizer alive in the process), then construct.
+     * False means the owner's cancel fired during one of the
+     * waits — nothing was decoded and the caller ends the job
+     * as Cancelled.
+     */
+    private fun ensureRecognizer(language: String, isCancelled: () -> Boolean): Boolean {
+        if (recognizer != null && builtLang == language) return true
+        if (!decode.awaitUnpoisoned(isCancelled)) return false
+        if (recognizer != null && builtLang == language) return true
+        if (!decode.acquireGate(isCancelled)) return false
+        return try {
+            decode.runTask(isCancelled, poisonOnAbandon = false) {
+                recognizerFor(language)
+            }
+            true
+        } catch (e: MtAbortException) {
+            false
+        }
     }
 
     /**
@@ -250,7 +307,10 @@ class AsrEngine(private val context: Context) {
      * plan's total before decoding starts (0.9.4) and then per
      * decoded speech chunk (0.7.0: chunks, not fixed windows — a
      * file that is mostly silence has few chunks and finishes
-     * fast).
+     * fast). Decodes run detached on the decode thread (0.9.5,
+     * TD-023): a cancel abandons the current chunk's await and
+     * returns the partial list promptly, as a boundary cancel
+     * did before, while the orphan finishes in the background.
      */
     fun transcribe(
         wav: File,
@@ -262,7 +322,11 @@ class AsrEngine(private val context: Context) {
         require(info.sampleRate == 16000 && info.channels == 1) {
             "expected a 16 kHz mono WAV, got ${info.sampleRate} Hz / ${info.channels} ch"
         }
-        val rec = recognizerFor(language)
+        // 0.9.5 (TD-023): the recognizer is built on the decode
+        // thread — after prepare() this is the already-built
+        // fast path. False means the cancel fired during a gate
+        // or construction wait: nothing was decoded.
+        if (!ensureRecognizer(language, isCancelled)) return emptyList()
         // 0.9.4 (TD-022): a cancel pressed during the load is
         // honoured here, before the VAD pass — after prepare()
         // this is a cached no-op, so the check is free.
@@ -287,7 +351,10 @@ class AsrEngine(private val context: Context) {
         // chunk 1 had decoded, so the whole load + VAD + plan
         // stretch showed a 0% bar with no numbers at all.
         onProgress(0, chunks.size)
-        // Pass 2: decode speech chunks only.
+        // Pass 2: decode speech chunks only. Each chunk's
+        // stream work runs as ONE task on the decode thread
+        // (0.9.5, TD-023); this thread reads the samples and
+        // awaits the text in cancel-poll slices.
         val segments = mutableListOf<AsrSegment>()
         var done = 0
         for (chunk in chunks) {
@@ -297,16 +364,45 @@ class AsrEngine(private val context: Context) {
             val n = (endSample - startSample).toInt()
             if (n > 0) {
                 val samples = WaveIo.readSamples(wav, info, startSample, n)
-                val stream = rec.createStream()
-                try {
-                    stream.acceptWaveform(samples, 16000)
-                    rec.decode(stream)
-                    val text = rec.getResult(stream).text.trim()
-                    if (SpeechTextFilter.keep(text)) {
-                        segments += AsrSegment(chunk.startSec, chunk.endSec, text, chunk.spans)
+                val text = try {
+                    decode.runTask(
+                        isCancelled,
+                        poisonOnAbandon = true,
+                        onAbandoned = {
+                            // The drain, on the decode thread,
+                            // after the orphaned decode returned:
+                            // the recognizer is retired — never
+                            // reused after an abandoned decode —
+                            // and the process gate frees with it.
+                            try { recognizer?.release() } catch (e: Exception) { }
+                            recognizer = null
+                            builtLang = null
+                            decode.releaseGate()
+                        }
+                    ) {
+                        val rec = recognizer
+                            ?: throw IllegalStateException("recognizer released before decode")
+                        val stream = rec.createStream()
+                        try {
+                            stream.acceptWaveform(samples, 16000)
+                            rec.decode(stream)
+                            rec.getResult(stream).text.trim()
+                        } finally {
+                            try { stream.release() } catch (e: Exception) { }
+                        }
                     }
-                } finally {
-                    try { stream.release() } catch (e: Exception) { }
+                } catch (e: MtAbortException) {
+                    // The owner stopped mid-chunk: the await is
+                    // abandoned, the decode finishes on the
+                    // decode thread and its result is discarded.
+                    // Break with the partial list, exactly as a
+                    // boundary cancel did before 0.9.5 — the
+                    // service's flag check ends the job as
+                    // Cancelled and the partials are dropped.
+                    break
+                }
+                if (SpeechTextFilter.keep(text)) {
+                    segments += AsrSegment(chunk.startSec, chunk.endSec, text, chunk.spans)
                 }
             }
             done++
@@ -315,12 +411,24 @@ class AsrEngine(private val context: Context) {
         return segments
     }
 
+    /**
+     * Release everything. The VAD is a job-thread object and is
+     * released directly, as before; the whisper recognizer is
+     * released on the decode thread via the coordinator's
+     * close, which also frees the process gate — deferred to
+     * the drain when a poison is still in flight, so no
+     * recognizer is ever leaked without a scheduled release
+     * (0.9.5, TD-023).
+     */
     fun release() {
-        try { recognizer?.release() } catch (e: Exception) { }
-        recognizer = null
-        builtLang = null
         try { vad?.release() } catch (e: Exception) { }
         vad = null
+        decode.close {
+            try { recognizer?.release() } catch (e: Exception) { }
+            recognizer = null
+            builtLang = null
+            decode.releaseGate()
+        }
     }
 
     companion object {

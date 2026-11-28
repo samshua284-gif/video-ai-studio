@@ -1105,3 +1105,161 @@ actually lasts on his Samsung, whether the counter's
 birth at planning reads as promised on a short clip,
 and how the bounded cancel FEELS — the load remainder
 is still a wait, now a named and bounded one.
+
+## TD-023 — Detached decode: poison-and-drain, a process gate, and a live chunk clock (0.9.5, 2026-11-28)
+
+The radical transcription-responsiveness release, ordered
+by the owner after his 0.9.4 field runs («ما زالت مشكلتنا
+في التفريغ الصوتي: العداد يقف مع القيمة الظاهرة في الصورة
+ولا يتحرك، وعند الإلغاء جارٍ الإيقاف يأخذ وقتًا طويلًا —
+أرجو إيجاد حل جذري»). One item-set only; translation, the
+diagnostics, the planning math and the media tools are
+untouched, and the atoms stay at 25 s (shrinking them is
+an unmeasured hypothesis the parent explicitly excluded).
+
+**The root.** A single chunk's sherpa `decode()` is one
+long, opaque, uninterruptible native call. Until 0.9.5
+the job thread sat inside it, so (a) the progress counter
+had nothing to count during a chunk, and (b) a cancel
+pressed mid-chunk waited for the whole decode — 0.9.4
+named the phases and birthed the counter at planning,
+but the atom itself stayed opaque and binding. This
+release separates the decode from the screen entirely.
+Total transcription time does NOT change; responsiveness
+does. That non-claim is part of the decision.
+
+**Thread confinement.** The whisper recognizer's whole
+life — construction (`recognizerFor`), every stream's
+create/accept/decode/result/release, and the recognizer's
+own release — happens on ONE dedicated single-thread
+executor owned by the new `media/DecodeCoordinator`. The
+job thread never touches sherpa whisper objects; it
+submits tasks and polls their futures in 250 ms slices
+(the `AbortableAwait` pattern and its `MtAbortException`
+signal, applied to a `CompletableFuture` and WITHOUT
+AbortableAwait's timeout ceiling — that ceiling exists
+for the MT bridge; a decode has no honest ceiling, see
+the residual bound below). The silero VAD pass stays on
+the job thread as before: a separate object, already
+cancel-aware.
+
+**prepare(language, isCancelled).** Construction is
+submitted to the decode thread and awaited in slices.
+The native build cannot be cut, but the await can: a
+cancel during the load returns false at once, the
+service's post-load check finishes Cancelled, and the
+construction completes on the decode thread into a
+ready-but-unused recognizer — harmless, released at
+engine close. Abandoning a construction await never
+poisons.
+
+**Per-chunk decode.** Each planned chunk is ONE task
+(stream create → accept → decode → result → release)
+returning its text; the job thread awaits it in slices.
+Completion follows the pre-0.9.5 flow exactly
+(SpeechTextFilter, segment append, progress callback).
+
+**Abandon + poison.** If the cancel flag rises while
+awaiting a chunk, the job thread ABANDONS the await
+within one slice (host-measured: 102 ms after the flag
+rose, against a fake 10 s decode) and `transcribe`
+returns its partial list promptly — the service's flag
+check finishes Cancelled and discards the partials, as
+a boundary cancel always did. The engine is now
+POISONED: the orphan still runs on the decode thread;
+when it returns, its result is discarded, its stream is
+released by the task itself, and the drain callback
+releases the recognizer and the process gate, clears
+the poison, and — if the engine was closed meanwhile —
+runs the close's finalise and shuts the executor down.
+No new decode may ever start on a poisoned engine.
+
+**The process gate — never two recognizers.** A
+companion-level fair semaphore in DecodeCoordinator
+guarantees at most one recognizer alive in the process
+across engine instances (services are recreated per
+job; the process is not). A fresh engine's prepare
+acquires the gate before constructing; while a poisoned
+predecessor drains, it waits — polling its own cancel
+hook, so a cancel during that wait aborts the new job
+cleanly while the orphan drains regardless. The gate
+frees ONLY when the predecessor's recognizer is
+actually released (the drain, or a normal close).
+
+**Engine close.** `TranscribeService` still caches `asr`
+per service instance. `AsrEngine.release()` releases the
+VAD directly (job-thread object) and closes the
+coordinator with a finalise that releases the recognizer
+and the gate on the decode thread — submitted behind any
+queued work, or deferred to the drain when poisoned. No
+recognizer is leaked without a scheduled release.
+
+**The live clock.** `TranscribeJobState.Transcribing`
+gains `chunkElapsedSec`. The service tracks (done,
+total, chunkStartMs) as the single source: the (0,total)
+birth and each progress callback restart the current
+chunk's clock; a 1-second ticker coroutine, alive only
+while the job is in Transcribing and never fighting a
+registered cancel, re-emits the state with the elapsed
+seconds and refreshes the notification's text with the
+same clock at most every ~2 s (its bar already carries
+done/total; the existing throttle is respected). The
+screen shows, under the unchanged counter line,
+`m4_chunk_elapsed` — «جارٍ فكّ هذا الجزء منذ %1$s» —
+rendered by the existing pure `formatDuration` (the
+preview player's helper; m:ss, h:mm:ss beyond an hour).
+A chunk has no internal progress to report; the honest
+moving number is how long the atom has been cooking.
+
+**The cancelling hint, rewritten to the new truth.**
+`m4_cancelling_hint` now reads: «تتوقف الشاشة فورًا؛
+وأي فكّ جارٍ يُنهي نفسه في الخلفية وتُرمى نتيجته.» /
+"The screen stops at once; any decoding in flight
+finishes in the background and its result is
+discarded." The 0.9.4 "first safe point" wording is
+gone — it described a wait this release abolished.
+
+**Residual bound, stated plainly.** If a native decode
+were to hang FOREVER, transcription would stay gated
+until process death: the orphan never returns, the
+drain never runs, the gate never frees. There is no
+fake timeout and no unsafe kill — interrupting a native
+call mid-flight risks corrupting the recognizer for
+every later job, which is worse than the wait. In
+practice a decode of at most 25 s of speech is finite;
+the bound exists so the design's one unfixable case is
+named, not hidden.
+
+**Verification.** The orchestration is host-tested
+against the REAL shipped `DecodeCoordinator` (harness in
+vas-host-test/mt095, 28/28): (a) a cancel during a fake
+10 s decode freed the awaiting side 102 ms after the
+flag rose (bound: ~300 ms); (b) the orphan's completion
+ran the drain, freed the gate, and a second coordinator
+acquired it in 1 ms; (c) three normal decodes returned
+their results and progress in order; (d) a gate wait
+during a predecessor's drain aborted on its own cancel
+in 501 ms (flag at 300 ms + one slice) while the orphan
+drained regardless, and the gate was free afterwards; a
+construction abandon does not poison; `formatDuration`
+renders the clock (0:00, 0:07, 1:05, 10:00, 59:59,
+1:01:01, negative clamped). A JUnit twin
+(`DecodeCoordinatorTest`, shorter sleeps) runs the same
+invariants in CI, and FormatTest gained the clock cases.
+Existing host suites re-run green: SpeechChunks 32/32,
+SpeechGate ALL PASS, Projects 16/16, mt091 14/14,
+TranslateOutcome 8/8, MtLanguages 8/8, worker node
+18/18. Full local type-check: all 36 app sources, zero
+errors. Strings parity 189/189 (one addition:
+`m4_chunk_elapsed`; one rewrite: `m4_cancelling_hint`),
+aapt2 clean in both locales, `ara_Arab` in code still
+0, no INTERNET permission.
+
+**Phone-only remainder, stated honestly.** What is
+proven here: the orchestration mechanics against fake
+decodes, the compile, the suites, the strings. What
+only the owner's Samsung can prove: real medium decode
+durations per chunk, how the instant cancel FEELS, how
+long a real drain takes after an abandoned long chunk,
+and whether the ticking clock reads as promised on his
+short clips — his original complaint case.

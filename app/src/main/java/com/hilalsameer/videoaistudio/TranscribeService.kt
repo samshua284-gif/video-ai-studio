@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.media.AsrEngine
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.MediaCommands
@@ -21,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,7 +43,18 @@ sealed interface TranscribeJobState {
      *  percent — the native load reports none, and none is
      *  fabricated. */
     data object LoadingEngine : TranscribeJobState
-    data class Transcribing(val done: Int, val total: Int) : TranscribeJobState
+
+    /** Decoding under way. [chunkElapsedSec] is the live clock
+     *  of the chunk currently being decoded (0.9.5, TD-023):
+     *  a chunk decode is one opaque native call with no
+     *  internal progress to report, so the honest moving
+     *  number is how long the current atom has been cooking —
+     *  re-emitted once a second by the service's ticker. */
+    data class Transcribing(
+        val done: Int,
+        val total: Int,
+        val chunkElapsedSec: Int = 0
+    ) : TranscribeJobState
     data class Done(
         val segments: List<AsrSegment>,
         val inputName: String,
@@ -49,9 +62,11 @@ sealed interface TranscribeJobState {
     ) : TranscribeJobState
     data class Failed(val excerpt: String, val logTail: String) : TranscribeJobState
 
-    /** Cancel was pressed: the request is registered instantly and
-     *  shown at once; the job itself stops at the next part
-     *  boundary (a native decode cannot be cut mid-part safely). */
+    /** Cancel was pressed: the request is registered instantly
+     *  and shown at once. Since 0.9.5 (TD-023) the job thread
+     *  abandons its decode await within a poll slice, so this
+     *  state is brief; any decode still in flight finishes on
+     *  the decode thread in the background and is discarded. */
     data object Cancelling : TranscribeJobState
     data object Cancelled : TranscribeJobState
 }
@@ -77,6 +92,15 @@ class TranscribeService : Service() {
     private val engine = MediaEngine()
     private var asr: AsrEngine? = null
     private var lastNotifMs = 0L
+
+    // The live clock's single source (0.9.5, TD-023): the
+    // progress callback owns (done, total) and restarts the
+    // current chunk's clock; the ticker only reads and re-emits.
+    @Volatile private var progDone = 0
+    @Volatile private var progTotal = 0
+    @Volatile private var chunkStartMs = 0L
+    private var tickerJob: Job? = null
+    private var lastTickNotifMs = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -161,36 +185,82 @@ class TranscribeService : Service() {
             // it out in silence.
             state.value = TranscribeJobState.LoadingEngine
             updateNotificationForce(getString(R.string.m4_loading_engine))
-            engineAsr.prepare(lang)
-            if (cancelFlag.get()) {
+            // 0.9.5 (TD-023): the construction runs on the
+            // decode thread and its await polls the cancel flag
+            // — a cancel during the load frees this phase at
+            // once (false), and the existing check below ends
+            // the job before any VAD or decode work happens.
+            val ready = engineAsr.prepare(lang) { cancelFlag.get() }
+            if (!ready || cancelFlag.get()) {
                 finish(TranscribeJobState.Cancelled)
                 return
             }
+            progDone = 0
+            progTotal = 0
+            chunkStartMs = System.currentTimeMillis()
             state.value = TranscribeJobState.Transcribing(0, 0)
             updateNotificationForce(getString(R.string.m4_analysing))
-            val windowSegments = engineAsr.transcribe(
-                wav, lang,
-                { done, total ->
-                    state.value = TranscribeJobState.Transcribing(done, total)
-                    acquireWakeLock()
-                    if (total > 0) {
+            // The live clock (0.9.5, TD-023): once a second,
+            // re-emit the Transcribing state with the current
+            // chunk's elapsed seconds, and refresh the
+            // notification's text with the same clock at most
+            // every ~2 s (its bar already carries done/total).
+            // The ticker never fights a registered cancel: it
+            // stops the moment the flag rises or the state
+            // leaves Transcribing.
+            tickerJob = scope.launch {
+                while (true) {
+                    delay(1000)
+                    if (cancelFlag.get()) break
+                    if (state.value !is TranscribeJobState.Transcribing) break
+                    val elapsed =
+                        ((System.currentTimeMillis() - chunkStartMs) / 1000).toInt()
+                    state.value = TranscribeJobState.Transcribing(
+                        progDone, progTotal, elapsed
+                    )
+                    val now = System.currentTimeMillis()
+                    if (progTotal > 0 && now - lastTickNotifMs >= 2000) {
+                        lastTickNotifMs = now
                         updateNotification(
                             getString(
-                                R.string.m4_transcribing, done, total,
-                                done * 100 / total
+                                R.string.m4_chunk_elapsed,
+                                formatDuration(elapsed * 1000L)
                             ),
-                            done, total
-                        )
-                    } else {
-                        // No plan, no counter: the honest label
-                        // for the VAD + planning window (TD-022).
-                        updateNotification(
-                            getString(R.string.m4_analysing), null, null
+                            progDone, progTotal
                         )
                     }
-                },
-                { cancelFlag.get() }
-            )
+                }
+            }
+            val windowSegments = try {
+                engineAsr.transcribe(
+                    wav, lang,
+                    { done, total ->
+                        progDone = done
+                        progTotal = total
+                        chunkStartMs = System.currentTimeMillis()
+                        state.value = TranscribeJobState.Transcribing(done, total)
+                        acquireWakeLock()
+                        if (total > 0) {
+                            updateNotification(
+                                getString(
+                                    R.string.m4_transcribing, done, total,
+                                    done * 100 / total
+                                ),
+                                done, total
+                            )
+                        } else {
+                            // No plan, no counter: the honest label
+                            // for the VAD + planning window (TD-022).
+                            updateNotification(
+                                getString(R.string.m4_analysing), null, null
+                            )
+                        }
+                    },
+                    { cancelFlag.get() }
+                )
+            } finally {
+                tickerJob?.cancel()
+            }
             // 0.6.4: Whisper's window segments become sentence
             // cues before anything downstream sees them (Done
             // state, translation source) — one giant cue per

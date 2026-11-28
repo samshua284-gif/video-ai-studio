@@ -119,7 +119,8 @@
     <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d (%3$d%%)…</string>
     <string name="m4_loading_engine">جارٍ تحميل نموذج التفريغ…</string>
     <string name="m4_analysing">جارٍ تحليل الكلام…</string>
-    <string name="m4_cancelling_hint">يُستكمل الإيقاف عند أول نقطة آمنة — تحميل النموذج أو فكّ جزء جارٍ لا يُقطع من المنتصف.</string>
+    <string name="m4_cancelling_hint">تتوقف الشاشة فورًا؛ وأي فكّ جارٍ يُنهي نفسه في الخلفية وتُرمى نتيجته.</string>
+    <string name="m4_chunk_elapsed">جارٍ فكّ هذا الجزء منذ %1$s</string>
     <string name="m4_preview_play">استماع</string>
     <string name="m4_preview_pause">إيقاف مؤقت</string>
     <string name="m4_preview_stop">إيقاف</string>
