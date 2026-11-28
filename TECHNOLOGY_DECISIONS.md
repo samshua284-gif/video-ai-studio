@@ -700,3 +700,59 @@ the 0.7.1 behaviour exactly. Text outputs are outside the
 split: transcription/translation exports go where the owner
 picks in the document picker, and the translation auto-save
 still writes its SRT/TXT to Downloads as before.
+
+## TD-019 — Translation stop that stops, visible load progress, and stale-text corrections (0.9.1, 2026-11-28)
+
+Three field reports from the owner on 0.9.0, each root-caused
+from the shipped code before any change:
+
+1. **Cancel did not stop.** ACTION_CANCEL only set a flag that
+was consulted after `MtEngine.ensureLoaded()` returned and
+between segments; the awaits themselves rode out the engine's
+pathological ceilings (load 15 min, segment 20 min), so
+«جارٍ الإيقاف» could hang for many minutes. Fix: a new
+`media/AbortableAwait` — the bridge deferreds are awaited in
+250 ms poll slices that check the owner's cancel flag, so a
+stop lands in about a quarter second in BOTH phases. The
+timeouts are untouched and still apply via withTimeout as
+ceilings for the non-abort path, throwing the same
+TimeoutCancellationException as before. Abort during a segment
+abandons the await (the worker finishes that unit in the
+background into a deferred nobody awaits; the engine stays
+loaded and reusable). Abort during LOAD poisons the engine:
+the next ensureLoaded destroys the WebView and recreates page
+and worker from scratch rather than trusting a half-loaded
+state. Translation semantics are unchanged — sentence by
+sentence, same engine, same completeness guard, same saves.
+
+2. **The load phase showed no progress.** The TD-017 cue
+percent exists only in the Translating state, while the
+owner's whole wait happens loading the ~950 MB NLLB model
+behind a bare spinner. The worker already reported per-file
+events; a new pure `media/MtLoadTracker` turns them into an
+honest "file x of y": a file counts when the worker itself
+reports it done (or at 100%), and the total is the fixed
+7-file set fetchMtDeps pins (5 JSON + 2 ONNX — byte-weighted
+percent was rejected because the WebView asset bridge does
+not guarantee byte lengths, and no percentage may be
+invented). LoadingModel now carries (filesDone, filesTotal,
+currentFile); the tool UI draws the bar and count, and the
+foreground notification carries the same numbers.
+
+3. **Stale engine note.** `m4_engine_note` still said
+"Whisper (small)" and "29-second parts" — the 0.9.0 engine
+is medium and the pipeline decodes VAD speech chunks of up
+to 25 seconds. Both locales rewritten with corrected facts
+only, same structure and claims otherwise.
+
+4. **Stale save claims in the transcription texts** (same
+family, owner's order the same morning). `m4_howto_4` still
+promised automatic saving to Downloads — false since 0.7.0
+made transcription saves manual; rewritten in both locales
+as a plain brief fact (save it yourself with the two export
+buttons, wherever you choose), with no narration of the
+change. The audit of its siblings found `m4_notif_done_saved`
+and `m4_autosave_note` making the same false claim but with
+zero usages left in the tree — both removed from both
+locales. The m5 strings were NOT touched: translation
+auto-save still exists, so its claims remain true.

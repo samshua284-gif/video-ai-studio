@@ -17,6 +17,7 @@ import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
 import com.hilalsameer.videoaistudio.media.MtEngine
+import com.hilalsameer.videoaistudio.media.MtLoadTracker
 import com.hilalsameer.videoaistudio.media.ProjectKind
 import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.MtLanguages
@@ -34,7 +35,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Observable state of a translation job (Milestone 5). */
 sealed interface TranslateJobState {
     data object Idle : TranslateJobState
-    data object LoadingModel : TranslateJobState
+
+    /** Model-load phase with real per-file progress (TD-019):
+     *  [filesDone] of [filesTotal] NLLB files fully loaded, and
+     *  the file currently loading, if one is known. */
+    data class LoadingModel(
+        val filesDone: Int, val filesTotal: Int, val currentFile: String?
+    ) : TranslateJobState
     data class Translating(val done: Int, val total: Int) : TranslateJobState
     data class Done(
         val segments: List<AsrSegment>,
@@ -140,16 +147,36 @@ class TranslateService : Service() {
                 finish(TranslateJobState.Failed(getString(R.string.m5_err_language)))
                 return
             }
-            state.value = TranslateJobState.LoadingModel
-            updateNotification(getString(R.string.m5_notif_loading), null, null)
+            // TD-019: the load phase reports real per-file
+            // progress (the owner's whole wait used to happen
+            // here, behind a bare spinner), and both engine waits
+            // take the cancel flag so a stop lands in ~250 ms.
+            val tracker = MtLoadTracker()
+            state.value = TranslateJobState.LoadingModel(
+                0, tracker.totalFiles, null
+            )
+            updateNotification(
+                getString(R.string.m5_notif_loading), 0, tracker.totalFiles
+            )
             val engine = mt ?: MtEngine(applicationContext).also { mt = it }
-            engine.onLoadProgress = { file ->
+            engine.onLoadProgress = { file, status, pct ->
+                val snap = tracker.onEvent(file, status, pct)
+                if (state.value is TranslateJobState.LoadingModel) {
+                    state.value = TranslateJobState.LoadingModel(
+                        snap.done, snap.total, snap.currentFile
+                    )
+                }
                 updateNotification(
-                    getString(R.string.m5_notif_loading) + " — " + file.substringAfterLast('/'),
-                    null, null
+                    getString(R.string.m5_notif_loading) +
+                        (snap.currentFile?.let { " — $it" } ?: ""),
+                    snap.done, snap.total
                 )
             }
-            if (!engine.ensureLoaded()) {
+            if (!engine.ensureLoaded { cancelFlag.get() }) {
+                if (cancelFlag.get()) {
+                    finish(TranslateJobState.Cancelled)
+                    return
+                }
                 finish(
                     TranslateJobState.Failed(
                         getString(R.string.m5_err_model) + ": " + (engine.lastError ?: "")
@@ -174,7 +201,9 @@ class TranslateService : Service() {
                     return
                 }
                 val fromMemory = CorrectionMemory.lookup(seg.text, memory)
-                val translated = fromMemory ?: engine.translate(seg.text, srcF, tgtF)
+                val translated = fromMemory ?: engine.translate(
+                    seg.text, srcF, tgtF
+                ) { cancelFlag.get() }
                 if (!TranslateFix.numbersPreserved(seg.text, translated)) {
                     flags.add(i)
                 }

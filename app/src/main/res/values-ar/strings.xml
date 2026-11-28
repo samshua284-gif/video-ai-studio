@@ -109,13 +109,11 @@
     <string name="m3_after">بعد المعالجة</string>
     <string name="m4_language">لغة الكلام</string>
     <string name="m4_run">فرّغ الكلام إلى نص</string>
-    <string name="m4_engine_note">محرك Whisper (small) على الجهاز عبر sherpa-onnx — بلا اتصال إطلاقًا، ولا يغادر شيء هاتفك. يُفرَّغ الصوت في أجزاء من ٢٩ ثانية؛ والأجزاء الخالية من الكلام تُتخطّى. ويجري التفريغ في الخلفية بكامل سرعته حتى والشاشة مطفأة — تابع تقدّمه من الإشعار.</string>
+    <string name="m4_engine_note">محرك Whisper (medium) على الجهاز عبر sherpa-onnx — بلا اتصال إطلاقًا، ولا يغادر شيء هاتفك. يُفرَّغ الكلام في أجزاء حتى ٢٥ ثانية؛ والأجزاء الخالية من الكلام تُتخطّى. ويجري التفريغ في الخلفية بكامل سرعته حتى والشاشة مطفأة — تابع تقدّمه من الإشعار.</string>
     <string name="m4_notif_channel">التفريغ الصوتي</string>
     <string name="m4_notif_running">جارٍ التفريغ في الخلفية…</string>
     <string name="m4_notif_done">اكتمل التفريغ الصوتي — النص جاهز في التطبيق.</string>
-    <string name="m4_notif_done_saved">اكتمل التفريغ — وحُفظ ملف SRT في مجلد التنزيلات.</string>
     <string name="m4_cancelling">جارٍ الإيقاف…</string>
-    <string name="m4_autosave_note">حُفظ ملفا SRT وTXT تلقائيًا أيضًا في مجلد التنزيلات.</string>
     <string name="m4_notif_failed">فشل التفريغ الصوتي — افتح التطبيق للتفاصيل.</string>
     <string name="m4_extracting">جارٍ استخراج الصوت…</string>
     <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d…</string>
@@ -132,7 +130,7 @@
     <string name="m4_howto_1">استورد فيديو — أو مقطعًا صوتيًا بأي صيغة (MP3 وM4A وWAV وOGG…) — بزر الاستيراد.</string>
     <string name="m4_howto_2">اختر لغة الكلام، أو اتركها على «تلقائي».</string>
     <string name="m4_howto_3">اضغط «بدء التفريغ». العمل يجري في الخلفية مع إشعار — الشاشة قد تنام والتطبيق قد يُغلق؛ الإشعار يُظهر التقدّم والاكتمال.</string>
-    <string name="m4_howto_4">عند الانتهاء تُحفظ ملفات SRT وTXT تلقائيًا في مجلد التنزيلات، ويمكنك أيضًا تصديرها بنفسك بزرّي التصدير.</string>
+    <string name="m4_howto_4">عند الانتهاء، احفظ النتيجة بنفسك بزرّي التصدير (TXT وSRT) في المكان الذي تختاره.</string>
     <string name="m4_howto_5">لترجمة النتيجة افتح أداة الترجمة — تأخذ هذا التفريغ مباشرة.</string>
     <string name="m5_source_last">من آخر تفريغ (%1$d جزءًا)</string>
     <string name="m5_import_srt">استيراد ملف SRT</string>
@@ -147,6 +145,7 @@
     <string name="m5_tgt_lang">الترجمة إلى</string>
     <string name="m5_start">بدء الترجمة</string>
     <string name="m5_loading_model">جارٍ تحميل نموذج الترجمة (المرة الأولى تأخذ وقتًا)…</string>
+    <string name="m5_loading_progress">ملف النموذج %1$d من %2$d</string>
     <string name="m5_translating">جارٍ ترجمة الجزء %1$d من %2$d (%3$d%%)…</string>
     <string name="m5_flags">⚠ أرقام %1$d جزءًا لم تنجُ في الترجمة كما هي — راجعها في النص: الأجزاء %2$s</string>
     <string name="m5_memory_note">الأجزاء التي صحّحتها من قبل تُقدَّم من ذاكرة تصحيحك تلقائيًا.</string>

@@ -12,7 +12,6 @@ import android.webkit.WebViewClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -60,9 +59,17 @@ class MtEngine(private val appContext: Context) {
     var lastError: String? = null
         private set
 
-    /** File name currently being read by the model loader. */
+    /** Load events from the worker: (file, status, per-file
+     *  percent or null when the bridge cannot know it). */
     @Volatile
-    var onLoadProgress: ((String) -> Unit)? = null
+    var onLoadProgress: ((String, String, Double?) -> Unit)? = null
+
+    /** Set when a load was aborted mid-flight (TD-019): the
+     *  worker may still be loading inside the WebView, so the
+     *  next [ensureLoaded] destroys and recreates the whole
+     *  engine instead of trusting a half-loaded state. */
+    @Volatile
+    private var loadPoisoned = false
 
     private val pending = ConcurrentHashMap<Int, CompletableDeferred<String>>()
     private val nextId = AtomicInteger(1)
@@ -123,23 +130,74 @@ class MtEngine(private val appContext: Context) {
     }
 
     /** Creates the WebView if needed and loads the NLLB model.
-     *  Returns false (with [lastError] set) when loading fails. */
-    suspend fun ensureLoaded(): Boolean {
-        withContext(Dispatchers.Main) { ensureWebView() }
-        pageReady?.await()
+     *  Returns false (with [lastError] set) when loading fails.
+     *
+     *  [shouldAbort] is polled while waiting (TD-019): an abort
+     *  returns false within about [AbortableAwait.POLL_MS] instead
+     *  of riding out the 15-minute ceiling, and poisons the load —
+     *  the next call recreates the engine from scratch (see
+     *  [loadPoisoned]). The timeout itself is unchanged and still
+     *  ends a genuinely stuck load with false. */
+    suspend fun ensureLoaded(shouldAbort: () -> Boolean = { false }): Boolean {
+        withContext(Dispatchers.Main) {
+            if (loadPoisoned) resetLocked()
+            ensureWebView()
+        }
+        val pr = pageReady ?: return false
+        try {
+            AbortableAwait.await(pr, LOAD_TIMEOUT_MS, shouldAbort)
+        } catch (e: MtAbortException) {
+            poisonLoad()
+            return false
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            lastError = "page load timed out"
+            return false
+        }
         if (modelReady) return true
         val d = CompletableDeferred<Boolean>().also { readyDeferred = it }
         post(JSONObject().put("type", "load").toString())
-        val ok = kotlinx.coroutines.withTimeoutOrNull(LOAD_TIMEOUT_MS) { d.await() } ?: false
-        return ok && modelReady
+        return try {
+            val ok = AbortableAwait.await(d, LOAD_TIMEOUT_MS, shouldAbort)
+            ok && modelReady
+        } catch (e: MtAbortException) {
+            poisonLoad()
+            false
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            false
+        }
+    }
+
+    /** Marks the in-flight load untrustworthy after an abort. The
+     *  WebView itself is destroyed lazily by [resetLocked] on the
+     *  next [ensureLoaded] (WebView work belongs on the main
+     *  thread; the abort is noticed on a worker coroutine). */
+    private fun poisonLoad() {
+        loadPoisoned = true
+        lastError = "load aborted"
+    }
+
+    /** Main-thread teardown of the whole engine; the next
+     *  [ensureWebView] builds a fresh page and worker. */
+    private fun resetLocked() {
+        try { webView?.destroy() } catch (e: Exception) { }
+        webView = null
+        pageReady = null
+        readyDeferred = null
+        modelReady = false
+        loadPoisoned = false
     }
 
     /** Translates one segment's text. The worker splits it into
      *  sentences and guards each one; the returned text is never
      *  silently empty for non-empty input. Throws on bridge or
      *  engine failure — the caller decides the job's fate. */
-    suspend fun translate(text: String, srcFlores: String, tgtFlores: String): String {
-        check(ensureLoaded()) { "MT model failed to load: ${lastError ?: "unknown"}" }
+    suspend fun translate(
+        text: String, srcFlores: String, tgtFlores: String,
+        shouldAbort: () -> Boolean = { false }
+    ): String {
+        check(ensureLoaded(shouldAbort)) {
+            "MT model failed to load: ${lastError ?: "unknown"}"
+        }
         val id = nextId.getAndIncrement()
         val d = CompletableDeferred<String>()
         pending[id] = d
@@ -153,7 +211,13 @@ class MtEngine(private val appContext: Context) {
                 .toString()
         )
         return try {
-            withTimeout(SEGMENT_TIMEOUT_MS) { d.await() }
+            // TD-019: abortable await — an owner stop lands within
+            // ~250 ms even mid-segment; the 20-minute ceiling and
+            // its TimeoutCancellationException are unchanged. The
+            // worker finishes the abandoned unit in the background
+            // and completes a deferred nobody awaits, which is
+            // harmless; the engine stays loaded and reusable.
+            AbortableAwait.await(d, SEGMENT_TIMEOUT_MS, shouldAbort)
         } finally {
             pending.remove(id)
         }
@@ -177,7 +241,14 @@ class MtEngine(private val appContext: Context) {
             "page-ready" -> pageReady?.complete(Unit)
             "progress" -> {
                 val f = o.optString("file")
-                if (f.isNotEmpty()) onLoadProgress?.invoke(f)
+                if (f.isNotEmpty()) {
+                    val pct = if (o.has("progress")) {
+                        o.optDouble("progress", -1.0).takeIf { it >= 0.0 }
+                    } else {
+                        null
+                    }
+                    onLoadProgress?.invoke(f, o.optString("status"), pct)
+                }
             }
             "ready" -> {
                 modelReady = true
@@ -209,6 +280,7 @@ class MtEngine(private val appContext: Context) {
     }
 
     fun release() {
+        loadPoisoned = false
         main.post {
             webView?.destroy()
             webView = null

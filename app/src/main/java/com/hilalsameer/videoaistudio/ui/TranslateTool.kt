@@ -409,10 +409,27 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                 }
             }
             is TranslateJobState.LoadingModel -> {
-                Row {
-                    CircularProgressIndicator()
-                    Text("  " + stringResource(R.string.m5_loading_model))
+                // TD-019: real per-file progress — the load phase
+                // is where the owner actually waits, and in 0.9.0
+                // it showed him nothing but a spinner.
+                val frac = if (j.filesTotal > 0) {
+                    j.filesDone.toFloat() / j.filesTotal
+                } else {
+                    0f
                 }
+                LinearProgressIndicator(
+                    progress = { frac }, modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    stringResource(R.string.m5_loading_model),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Text(
+                    stringResource(
+                        R.string.m5_loading_progress, j.filesDone, j.filesTotal
+                    ) + (j.currentFile?.let { " — $it" } ?: ""),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 TextButton(onClick = { TranslateService.cancel(context) }) {
                     Text(stringResource(R.string.m2_cancel))
                 }

@@ -109,13 +109,11 @@
     <string name="m3_after">Processed</string>
     <string name="m4_language">Spoken language</string>
     <string name="m4_run">Transcribe the speech</string>
-    <string name="m4_engine_note">On-device Whisper (small) via sherpa-onnx — fully offline, nothing leaves the phone. The audio is recognized in 29-second parts; parts without speech are skipped. Transcription runs in the background at full speed even with the screen off — follow its progress in the notification.</string>
+    <string name="m4_engine_note">On-device Whisper (medium) via sherpa-onnx — fully offline, nothing leaves the phone. Speech is recognized in parts of up to 25 seconds; parts without speech are skipped. Transcription runs in the background at full speed even with the screen off — follow its progress in the notification.</string>
     <string name="m4_notif_channel">Transcription</string>
     <string name="m4_notif_running">Transcribing in the background…</string>
     <string name="m4_notif_done">Transcription complete — the text is ready in the app.</string>
-    <string name="m4_notif_done_saved">Transcription complete — the SRT file was saved to Downloads.</string>
     <string name="m4_cancelling">Stopping…</string>
-    <string name="m4_autosave_note">The SRT and TXT files were also saved automatically to the Downloads folder.</string>
     <string name="m4_notif_failed">Transcription failed — open the app for details.</string>
     <string name="m4_extracting">Extracting the audio…</string>
     <string name="m4_transcribing">Transcribing part %1$d of %2$d…</string>
@@ -132,7 +130,7 @@
     <string name="m4_howto_1">Import a video — or an audio clip in any format (MP3, M4A, WAV, OGG…) — with the import button.</string>
     <string name="m4_howto_2">Choose the spoken language, or leave it on Auto.</string>
     <string name="m4_howto_3">Press Start transcription. The work runs in the background with a notification — the screen may sleep and the app may be closed; the notification shows the progress and the completion.</string>
-    <string name="m4_howto_4">When it finishes, the SRT and TXT files are saved automatically to the Downloads folder. You can also export them yourself with the two export buttons.</string>
+    <string name="m4_howto_4">When it finishes, save the result yourself with the two export buttons (TXT and SRT), wherever you choose.</string>
     <string name="m4_howto_5">To translate the result, open the Translation tool — it takes this transcription directly.</string>
     <string name="m5_source_last">From the latest transcription (%1$d parts)</string>
     <string name="m5_import_srt">Import an SRT file</string>
@@ -147,6 +145,7 @@
     <string name="m5_tgt_lang">Translate to</string>
     <string name="m5_start">Start translation</string>
     <string name="m5_loading_model">Loading the translation model (first time takes a while)…</string>
+    <string name="m5_loading_progress">Model file %1$d of %2$d</string>
     <string name="m5_translating">Translating part %1$d of %2$d (%3$d%%)…</string>
     <string name="m5_flags">⚠ The numbers in %1$d part(s) did not survive translation intact — check them in the text: parts %2$s</string>
     <string name="m5_memory_note">Segments you corrected before are served from your correction memory automatically.</string>
