@@ -148,7 +148,7 @@ val fetchAsrDeps by tasks.registering {
                 "595d00a338a365a7bfa0ca7f296cabc639583bef770ab6130df90f49a6412747"
             ),
             Triple(
-                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/tokens.txt",
+                "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-medium/resolve/main/medium-tokens.txt",
                 "models/whisper-medium/medium-tokens.txt",
                 "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126"
             ),

@@ -666,3 +666,9 @@ round by his order («الان تعديل وبناء نموذج medium مع
    picker remains a visible secondary button («منتقي النظام»)
    in both import states; an empty library says so and offers
    the same door. The video import flow is unchanged.
+   Refinement (same round, the owner's follow-up): each
+   chooser row also names the folder the file lives in —
+   MediaStore RELATIVE_PATH on API 29+, derived from the
+   legacy path column below it — because his audio is
+   scattered across many folders and the single gathered
+   list must say where each file sits while he picks.

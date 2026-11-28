@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -249,6 +250,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium
                         )
+                        if (track.folder.isNotEmpty()) {
+                            Text(
+                                track.folder,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Text(
                             formatDuration(track.durationMs),
                             style = MaterialTheme.typography.bodySmall,
@@ -542,8 +550,15 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     }
 }
 
-/** One row of the in-app audio chooser (0.9.0, TD-017). */
-private data class AudioTrack(val uri: Uri, val name: String, val durationMs: Long)
+/**
+ * One row of the in-app audio chooser (0.9.0, TD-017). The
+ * folder is shown under the name: the owner's audio lives
+ * scattered across many folders, and the gathered list must
+ * say where each file actually sits while he picks.
+ */
+private data class AudioTrack(
+    val uri: Uri, val name: String, val durationMs: Long, val folder: String
+)
 
 /**
  * The device's audio library, newest first, from MediaStore —
@@ -553,10 +568,14 @@ private data class AudioTrack(val uri: Uri, val name: String, val durationMs: Lo
  */
 private fun queryAudioLibrary(context: Context): List<AudioTrack> {
     val out = ArrayList<AudioTrack>()
+    // RELATIVE_PATH exists only on API 29+; below it the folder
+    // is derived from the legacy absolute-path column instead.
+    val modern = Build.VERSION.SDK_INT >= 29
     val projection = arrayOf(
         MediaStore.Audio.Media._ID,
         MediaStore.Audio.Media.DISPLAY_NAME,
-        MediaStore.Audio.Media.DURATION
+        MediaStore.Audio.Media.DURATION,
+        if (modern) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
     )
     try {
         context.contentResolver.query(
@@ -567,15 +586,17 @@ private fun queryAudioLibrary(context: Context): List<AudioTrack> {
             val idI = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val nameI = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
             val durI = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+            val pathI = c.getColumnIndex(projection[3])
             while (c.moveToNext()) {
                 val name = c.getString(nameI) ?: continue
                 val dur = if (c.isNull(durI)) 0L else c.getLong(durI)
+                val raw = if (pathI >= 0 && !c.isNull(pathI)) c.getString(pathI) else null
                 out.add(
                     AudioTrack(
                         ContentUris.withAppendedId(
                             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, c.getLong(idI)
                         ),
-                        name, dur
+                        name, dur, folderOf(raw, modern)
                     )
                 )
                 if (out.size >= 100) break
@@ -583,6 +604,26 @@ private fun queryAudioLibrary(context: Context): List<AudioTrack> {
         }
     } catch (e: Exception) { }
     return out
+}
+
+/**
+ * The containing folder of one library row, as a short relative
+ * path: RELATIVE_PATH arrives as one already ("Music/",
+ * "WhatsApp/Media/WhatsApp Audio/"); a legacy absolute path is
+ * reduced to the part below the shared-storage root, or to its
+ * parent folder name when it lives somewhere else entirely.
+ */
+private fun folderOf(raw: String?, modern: Boolean): String {
+    if (raw.isNullOrBlank()) return ""
+    if (modern) return raw.trim().trimEnd('/')
+    val parent = raw.substringBeforeLast('/', "")
+    if (parent.isEmpty()) return ""
+    val root = Environment.getExternalStorageDirectory().path
+    return if (parent.startsWith(root)) {
+        parent.removePrefix(root).trim('/')
+    } else {
+        parent.substringAfterLast('/')
+    }
 }
 
 /**
