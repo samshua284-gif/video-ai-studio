@@ -405,8 +405,32 @@ class TranscribeService : Service() {
         private const val EXTRA_LANG = "lang"
         private const val EXTRA_TITLE = "title"
 
+        /** 0.10.0 (TD-025): the owner's hand corrections to a
+         *  finished transcription, keyed by the recognized
+         *  text — the transcription counterpart of
+         *  TranslateService.MEMORY_PREFS. */
+        const val CORRECTION_PREFS = "transcription_correction_memory"
+
         /** The one job state both the service and the screen read. */
         val state = MutableStateFlow<TranscribeJobState>(TranscribeJobState.Idle)
+
+        /**
+         * 0.10.0 (TD-025): the corrected cues become THE
+         * transcription result. The Done state is replaced by
+         * one carrying [corrected], so every consumer of the
+         * result — the transcription screen's SRT/TXT exports
+         * and the translation tool's in-memory source — sees
+         * the corrected text with the original timings. The
+         * size guard is the structural half of the station's
+         * contract: correction can neither add nor remove a
+         * cue, so a list of any other size is not a
+         * correction and is refused.
+         */
+        fun applyCorrectedSegments(corrected: List<AsrSegment>) {
+            val cur = state.value as? TranscribeJobState.Done ?: return
+            if (corrected.size != cur.segments.size) return
+            state.value = cur.copy(segments = corrected)
+        }
 
         fun start(
             context: Context, uri: String, name: String,

@@ -322,6 +322,13 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     var pendingExport by remember { mutableStateOf<File?>(null) }
     var pendingExportSource by remember { mutableStateOf("") }
 
+    // 0.10.0 (TD-025): the correction station's session
+    // state — whether it is open, the memory snapshot it was
+    // opened with, and how many pairs its last save taught.
+    var correcting by remember { mutableStateOf(false) }
+    var memoryForSession by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var taughtCount by remember { mutableIntStateOf(0) }
+
     val doneSegments = (job as? TranscribeJobState.Done)?.segments
     LaunchedEffect(doneSegments) {
         if (doneSegments != null) editedText = SubtitleFormat.buildTxt(doneSegments)
@@ -504,6 +511,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
     fun startJob() {
         val uri = state.currentUri ?: return
         val info = state.currentInfo ?: return
+        taughtCount = 0
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -525,6 +533,35 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
             fontWeight = FontWeight.Bold
         )
         Spacer(Modifier.height(12.dp))
+
+        // 0.10.0 (TD-025): while the correction station is
+        // open it owns the screen. It receives the Done
+        // segments and the correction-memory snapshot, and
+        // its save makes the corrected cues the result.
+        if (correcting && doneSegments != null) {
+            CorrectionScreen(
+                info = state.currentInfo,
+                segments = doneSegments,
+                memory = memoryForSession,
+                onSave = { corrected, pairs ->
+                    if (pairs.isNotEmpty()) {
+                        val mp = context.getSharedPreferences(
+                            TranscribeService.CORRECTION_PREFS,
+                            Context.MODE_PRIVATE
+                        )
+                        mp.edit().apply {
+                            pairs.forEach { (k, v) -> putString(k, v) }
+                            apply()
+                        }
+                    }
+                    TranscribeService.applyCorrectedSegments(corrected)
+                    taughtCount = pairs.size
+                    correcting = false
+                },
+                onCancel = { correcting = false }
+            )
+            return@Column
+        }
 
         HowToCard(
             steps = listOf(
@@ -771,6 +808,31 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         modifier = Modifier.padding(top = 6.dp)
                     )
                     Spacer(Modifier.height(10.dp))
+                    // 0.10.0 (TD-025): the correction station —
+                    // the words, cue by cue, with the timings
+                    // locked by design. The memory snapshot is
+                    // read at the door, so the station works
+                    // from what his memory holds right now.
+                    Button(
+                        onClick = {
+                            memoryForSession = context.getSharedPreferences(
+                                TranscribeService.CORRECTION_PREFS,
+                                Context.MODE_PRIVATE
+                            ).all.mapValues { it.value.toString() }
+                            taughtCount = 0
+                            correcting = true
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(stringResource(R.string.m4c_open)) }
+                    if (taughtCount > 0) {
+                        Text(
+                            stringResource(R.string.m4c_taught, taughtCount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
                     val base = SubtitleFormat.exportBaseName(
                         info?.name ?: j.inputName, info?.title ?: j.title
                     )

@@ -1373,3 +1373,130 @@ the shipped code. What only the owner's ear can prove:
 the felt sync on real overlapped film dialogue. The
 synthetic placement gains are what this build claims —
 nothing more.
+
+## TD-025 — The transcription correction station: words corrected inside their timed cues (0.10.0, 2026-11-28)
+
+Ordered by the owner as a big item after the 0.9.x phase
+closed by his word: «لدي فكرة — لماذا لا ننسخ النص المفرغ
+ونقوم في إصلاح كلماته لغوياً وبعدها نحوله ملف SRT» —
+take the transcribed text, fix its words linguistically,
+then make the SRT from the fixed text. The scope he
+approved by name: a correction screen for the timed
+cues, preview at the cue's moment, find & replace across
+all cues, a correction memory for transcription, a
+narrow automatic-fix mechanism, and correction feeding
+everything downstream. The exclusions he approved with
+it: no retiming, no cue split/merge, no diarization, no
+ASR engine/model change, no general rewriter.
+
+**The one engineering fact that shapes the build.**
+Timings live in the cue structure, not in the text. The
+naive form of the idea — copy the plain text out, fix
+it, convert it back to SRT — throws every timing away,
+and rebuilding them from bare text would re-create the
+proportional-placement error measured in mt097 (mean
+0.26 s, max 0.65 s) or worse. So the station corrects
+the words INSIDE their timed cues: the SRT that comes
+out carries the original timing lines byte for byte,
+and only the text lines change.
+
+**The structural timing lock.** The pure core
+(`media/TranscriptionCorrection.kt`) accepts segments
+plus text-keyed edits and returns segments built with
+`AsrSegment.copy(text = …)` — start, end and speech
+spans are the input's own values, and no function in
+the layer takes a timing as a parameter, so no caller
+can retime a cue even by accident. The screen's
+editing state is a list of texts only, one per cue;
+timings are not merely displayed read-only, they are
+never in the room. The service enforces the other
+half: `TranscribeService.applyCorrectedSegments`
+replaces the Done state only with a list of the SAME
+size — correction can neither add nor remove a cue.
+
+**The six parts.** (1) The correction screen
+(`ui/CorrectionTool.kt`), entered from the
+transcription Done state by a labelled button: one
+card per cue — its time range shown, its text editable
+in place. (2) Hear-the-cue preview on the proven
+InputPreview pattern (0.9.2): MediaPlayer for audio, a
+bounded VideoView when the file's own inspection says
+it carries video; tapping a cue seeks to its start and
+playback pauses at its end (a 200 ms poll, the input
+preview's rhythm). When the screen was recreated and
+the imported file forgotten, there is no preview and
+the station simply works without it — correction never
+depended on it. (3) Find & replace across all cues:
+literal `String.replace` — no regex, no word
+boundaries, single pass — with the count of cues that
+WILL change shown live before applying and the count
+that DID change shown after. (4) A correction memory
+for transcription, mirroring the translation design
+(TD-006 Layer 3): pairs harvested at save time under
+`CorrectionMemory.key`, stored in SharedPreferences
+(`TranscribeService.CORRECTION_PREFS`, the counterpart
+of `translation_memory`); when the same recognized
+text recurs, the stored correction is OFFERED on the
+cue, visibly marked as his memory — applied only on
+his tap, dismissed on his tap, never silent. (5) The
+Layer-1 mechanism, `applyRules`, runs at the station's
+door over `BUILT_IN_RULES` — which ships EMPTY, and
+the emptiness is the honest part: a rule may enter
+only with its own measured evidence on whisper-medium
+output, no such evidence exists in this project today,
+and the voice translator's rules belong to a different
+model and were not imported. The live source of fixes
+is the owner's memory (part 4), applied by his hand.
+There is no general linguistic rewriter in this build,
+by the approved scope and by the standing design
+(a corrector that invents is worse than an error that
+shows). (6) Correction precedes translation: the
+corrected list becomes THE transcription result — the
+Done state itself is replaced — so the SRT/TXT
+exports are built from corrected cues and the
+translation tool's in-memory source (which reads the
+Done state) receives the corrected text. An already
+imported SRT, or a translation source the owner had
+already picked from an older transcription, is not
+retro-changed: source selection keeps its existing
+semantics, and re-picking «the last transcription»
+reads the corrected cues.
+
+**Verification.** Host harness on the REAL shipped
+files (vas-host-test/mt100, 39/39): (a) after text
+edits, replace-all, rule sweeps and memory application
+— and after the full chain the screen performs — the
+timing fingerprint (every start, end and span) is
+identical to the original's; out-of-range edits are
+ignored; untouched cues are the same objects. (b)
+Replace-all counts and contents exact on Arabic and
+English samples, including the guards (empty needle,
+find == replacement), single-pass growth (a replacement
+containing the needle is not rescanned) and literal
+substring semantics. (c) Memory: a taught pair is
+offered on recurrence at the right index and changes
+nothing by itself; a tap applies it with timings
+intact; blank/unchanged edits and size mismatches
+teach nothing; the whitespace-normalised key still
+offers. (d) The corrected SRT's timing and index lines
+are byte-identical to the uncorrected export's, its
+text lines differ exactly where edited, and the TXT
+reflects the corrections. JUnit twin
+(`TranscriptionCorrectionTest`, 14 tests) runs in CI
+with the full suite. Full local type-check: all 38 app
+sources, zero errors, 333 files in the check jar (313
+classes at 0.9.6; the growth is the two new files and
+their composables). Strings parity 203/203 — exact key
+sets in the same order; aapt2 compiles both locales
+clean; `ara_Arab` in code still 0; the manifest is
+untouched and still declares no INTERNET permission.
+
+**Phone-only remainder, stated honestly.** What is
+proven here: the timing lock, the sweep exactness, the
+memory semantics and the export identity, all against
+the shipped code, plus CI's full build and test suite.
+What only the owner's hands can prove: the station's
+feel on a real film's transcription — correcting a cue
+while hearing it, teaching a fix and meeting it again
+in the next file. The synthetic guarantees are what
+this build claims — nothing more.
