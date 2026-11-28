@@ -7,7 +7,14 @@
   // Owns the MT Web Worker and relays between the Kotlin bridge
   // (MtBridge) and the worker, JSON strings both ways — the same
   // protocol the owner's voice translator field-proved.
-  var worker = new Worker('mt-worker.js');
+  // TD-019: the worker MUST be a module worker — mt-worker.js
+  // opens with an ES-module import of transformers.min.js, and
+  // a classic worker dies parsing it ("Cannot use import
+  // statement outside a module"), which silently killed model
+  // loading in the field from 0.6.0 until 0.9.1. The owner's
+  // voice translator constructs its identical worker exactly
+  // this way; that construction is the field-proven one.
+  var worker = new Worker('mt-worker.js', { type: 'module' });
   worker.onmessage = function (e) { MtBridge.onMessage(JSON.stringify(e.data)); };
   worker.onerror = function (err) {
     MtBridge.onMessage(JSON.stringify({

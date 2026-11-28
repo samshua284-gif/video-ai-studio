@@ -703,8 +703,34 @@ still writes its SRT/TXT to Downloads as before.
 
 ## TD-019 — Translation stop that stops, visible load progress, and stale-text corrections (0.9.1, 2026-11-28)
 
-Three field reports from the owner on 0.9.0, each root-caused
-from the shipped code before any change:
+**HEADLINE — the defect that outranked the other four.** The
+owner's 0.9.0 screenshot showed the engine log tail:
+«فشل تحميل نموذج الترجمة: Uncaught SyntaxError: Cannot use
+import statement outside a module». Root cause, proven by
+byte-level comparison: `mt/engines/mt.html` created the worker
+CLASSIC (`new Worker('mt-worker.js')`) while mt-worker.js
+opens with an ES-module import of transformers.min.js — a
+classic worker dies parsing it, with exactly that error
+string. The model therefore NEVER loaded: field translation
+had been dead since M5 shipped in 0.6.0, invisible to CI
+(which never executes a WebView) and to every host test. The
+fix is one construction: `new Worker('mt-worker.js',
+{ type: 'module' })` — the exact construction the owner's
+voice translator ships (its index.html line 527) for the
+identical worker and a transformers.min.js whose sha256 is
+byte-identical to the copy pinned here (bcf7cf304e51f470…).
+Audit of the same defect class: mt.html holds the ONLY
+`new Worker(` in all web assets, and MtEngine's MIME mapping
+already matches the voice translator's proven serving
+(.js → text/javascript, .wasm → application/wasm,
+.json → application/json), so no MIME change was needed.
+Honest limit: removing the proven root cause is verified
+statically; that the model now loads end-to-end and the
+first cue translates can only be proven on the owner's
+phone.
+
+The remaining field reports from the owner on 0.9.0, each
+root-caused from the shipped code before any change:
 
 1. **Cancel did not stop.** ACTION_CANCEL only set a flag that
 was consulted after `MtEngine.ensureLoaded()` returned and
