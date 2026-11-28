@@ -1263,3 +1263,113 @@ durations per chunk, how the instant cancel FEELS, how
 long a real drain takes after an abandoned long chunk,
 and whether the ticking clock reads as promised on his
 short clips — his original complaint case.
+
+## TD-024 — Overlapped voices: clause-level cue placement and a minimum cue floor (0.9.6, 2026-11-28)
+
+The phase-closing build, ordered by the owner after 0.9.5
+was field-confirmed («نجح الأمر مبروك، ولكن تبقى مشكلة
+تداخل الأصوات في الترجمة — بعدها نغلق هذه المرحلة»).
+One file's mechanics only: `media/SubtitleSegmenter.kt`.
+Everything else is frozen.
+
+**The defect, mechanically.** Translation never retimes
+cues, so the drift and interleave the owner sees in
+translated subtitles is inherited from the transcription's
+cue placement in overlapped-speech regions. Overlapped
+voices produce ONE long unbroken VAD span (no pauses)
+holding many sentences, and whisper returns
+under-punctuated run-on text for the mixture.
+`SubtitleSegmenter.distribute` placed sentences by global
+character-length proportion, so (1) a single huge sentence
+became one huge cue pinned to a wide proportional window —
+a guess that visibly drifts — and (2) very short
+interjections got sub-second windows that flicker. Cues
+were already monotonic and non-overlapping by
+construction; this pass tightens PLACEMENT granularity
+and readability inside spans without breaking that.
+
+**Change 1 — clause-level splitting of over-long
+sentences.** Before distribution, `splitClauses` splits
+any sentence longer than 84 characters at clause
+boundaries, in this priority: '،', ',', '؛', ';', '—',
+'–', and finally ' و ' (space-waw-space). Boundary
+punctuation stays attached to the PRECEDING piece; the
+conjunction stays attached to the FOLLOWING piece, as
+Arabic reads. Within one boundary kind, the cut nearest
+the piece's midpoint is chosen. A split is usable only
+when both sides keep at least 20 characters (no
+shredding); a sentence with no usable boundary stays
+whole and is never cut mid-word. HARD INVARIANT:
+splitting loses and adds nothing — rejoining the pieces
+in order reproduces the original sentence exactly,
+character for character, separators included. The pieces
+flow into `distribute` as individual sentences; the
+sub-cues carry no spans, exactly as distribute's output
+was already shaped.
+
+**Change 2 — a minimum cue duration floor of 0.8 s.**
+After a span's group is placed by the existing logic, any
+cue shorter than the floor is extended by borrowing time
+from the other cues of the same span: the FOLLOWING cues
+first (nearest first), then the preceding ones — the
+preceding fallback exists for a short cue whose following
+neighbours are themselves sub-floor, where the time can
+only come from earlier in the same span. A donor never
+drops below the floor itself. If every donor is already
+at the floor, the short cue grows into the span's unused
+room. Borrowing never crosses the span's bounds, never
+creates overlap or a negative duration, and never
+reaches into a silence gap. THE FLOOR YIELDS when the
+span cannot fund it: if the span is shorter than
+cues × 0.8 s, the existing proportional placement for
+that span stands unchanged. When neither the cap nor the
+floor binds, behaviour is identical to 0.9.5's
+segmenter — verified, not hoped (see below).
+
+**Honest scope.** This tightens cue placement for
+app-produced transcriptions; imported SRT files keep
+their own timings. Two voices truly simultaneous in the
+recording still share one span and one mixed text
+stream — no diarization or source-separation model
+exists in this offline stack, and that residual is a
+physical limit, recorded here as the phase's known
+limit at closing.
+
+**Verification.** JUnit (`SubtitleSegmenterTest`, runs
+in CI) plus a host twin harness against the REAL shipped
+segmenter (vas-host-test/mt096, 47/47): (a) the
+text-preservation invariant holds for Arabic and English
+samples across every boundary kind, including a ' و '
+case (the conjunction opens the following piece) and a
+no-boundary case that stays whole; (b) one 25 s span
+carrying 10 alternating short sentences yields 10 cues,
+monotonic, pairwise non-overlapping, every cue ≥ 0.8 s,
+all inside the span; (c) one unpunctuated 303-character
+run-on over a 20 s span yields 5 cues whose texts rejoin
+to the original sentence exactly, every cue text ≤ 84
+characters; (d) ALL pre-existing SubtitleSegmenterTest
+cases pass UNCHANGED — no expectation was edited. Two of
+them now exercise the new code: the dialogue block's
+floor binds (its shortest cue, «Yep.», was 0.42 s under
+the old placement and is exactly 0.8 s now; count,
+texts, endpoints and contiguity are unchanged), and the
+voice-spans case is bit-identical because the floor
+never binds there. A floor-yield case (3 cues in a 2.0 s
+span) keeps the proportional placement. Existing host
+suites re-run green: SpeechChunks 32/32, SpeechGate ALL
+PASS, Projects 16/16, mt091 14/14, TranslateOutcome 8/8,
+MtLanguages 8/8, DecodeCoordinator 28/28, worker node
+18/18. Full local type-check: all 36 app sources, zero
+errors, 313 classes — identical to 0.9.5, as expected
+for a change inside one existing object. Strings parity
+189/189 exact key sets — NO string changes in this
+release; aapt2 compiles both locales clean; `ara_Arab`
+in code still 0; no INTERNET permission.
+
+**Phone-only remainder, stated honestly.** What is
+proven here: the splitting invariant, the floor's
+placement guarantees, and non-regression, all against
+the shipped code. What only the owner's ear can prove:
+the felt sync on real overlapped film dialogue. The
+synthetic placement gains are what this build claims —
+nothing more.
