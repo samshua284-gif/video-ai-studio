@@ -135,6 +135,7 @@
     <string name="m4c_save">حفظ التصحيحات</string>
     <string name="m4c_taught">حُفظ %1$d تصحيحًا في ذاكرة التصحيح</string>
     <string name="m4c_play_from">سماع هذا السطر</string>
+    <string name="m4d_restored">مسودة مستعادة — عادت إليك النتيجة التي كنت تعمل عليها. لم يُصدَّر شيء؛ الحفظ ما زال بزري التصدير فقط.</string>
     <string name="m4_preview_play">استماع</string>
     <string name="m4_preview_pause">إيقاف مؤقت</string>
     <string name="m4_preview_stop">إيقاف</string>
@@ -190,6 +191,18 @@
     <string name="m5_howto_3">اختر لغة المصدر واللغة المراد الترجمة إليها، ثم اضغط «بدء الترجمة». العمل يجري في الخلفية مع إشعار، كما في التفريغ.</string>
     <string name="m5_howto_4">التوقيتات لا تتغير أبدًا: كل سطر مترجم يحتفظ بتوقيته الأصلي، فيطابق ملف SRT المترجم الفيلم مباشرة.</string>
     <string name="m5_howto_5">عند الانتهاء، احفظ النتيجة بنفسك بزرّي التصدير (TXT وSRT) في المكان الذي تختاره. وسطر ⚠ تحت النتيجة يسمّي أي جزء تحتاج أرقامه مراجعتك. عدّل النص قبل التصدير إن شئت — تعديلاتك تُحفظ في ذاكرة تصحيحك وتُقدَّم لك عند تكرار الجزء نفسه مستقبلًا.</string>
+    <string name="m5d_restored">مسودة مستعادة — عادت إليك الترجمة التي كنت تعمل عليها. لم يُصدَّر شيء؛ الحفظ ما زال بزري التصدير فقط.</string>
+    <string name="m5c_open">تصحيح الترجمة</string>
+    <string name="m5c_title">محطة تصحيح الترجمة</string>
+    <string name="m5c_hint">كل سطر يعرض نصه الأصلي (للقراءة فقط) فوق الترجمة. تُصحَّح هنا كلمات الترجمة فقط — التوقيتات مقفلة بالتصميم. و«أعد ترجمة هذا السطر» يطلب من المترجم دون اتصال صياغة جديدة للسطر، ولا تحل محل النص إلا عندما تعتمدها.</string>
+    <string name="m5c_source_label">النص الأصلي</string>
+    <string name="m5c_retranslate">أعد ترجمة هذا السطر</string>
+    <string name="m5c_retranslating">جارٍ الترجمة…</string>
+    <string name="m5c_offer_label">ترجمة جديدة:</string>
+    <string name="m5c_accept">اعتماد</string>
+    <string name="m5c_error_label">أفاد المحرك:</string>
+    <string name="m5c_passed_note">مرّت %1$d من %2$d أجزاء هذا السطر دون ترجمة.</string>
+    <string name="m5c_no_error_detail">لم تُذكر تفاصيل للخطأ.</string>
     <string name="proj_title">مشاريعي</string>
     <string name="proj_empty">لا أعمال محفوظة بعد. الأعمال التي تحفظها من الأدوات ستظهر هنا.</string>
     <string name="proj_file_missing">لم يعد الملف موجودًا</string>

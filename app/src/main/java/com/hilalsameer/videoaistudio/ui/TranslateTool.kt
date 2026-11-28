@@ -51,8 +51,11 @@ import com.hilalsameer.videoaistudio.TranscribeJobState
 import com.hilalsameer.videoaistudio.TranscribeService
 import com.hilalsameer.videoaistudio.TranslateJobState
 import com.hilalsameer.videoaistudio.TranslateService
+import com.hilalsameer.videoaistudio.data.VideoInfo
+import com.hilalsameer.videoaistudio.data.inspectVideo
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
+import com.hilalsameer.videoaistudio.media.DraftsRepository
 import com.hilalsameer.videoaistudio.media.MtLanguages
 import com.hilalsameer.videoaistudio.media.ProjectKind
 import com.hilalsameer.videoaistudio.media.ProjectsRepository
@@ -108,6 +111,19 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
     var sourceSegments by remember { mutableStateOf<List<AsrSegment>?>(null) }
     var sourceName by remember { mutableStateOf("") }
     var sourceNote by remember { mutableStateOf("") }
+    // 0.10.1 (TD-026): whether the working source is the latest
+    // transcription — then its media is the transcription's
+    // input, and the translation draft (and the correction
+    // station's hear-the-cue) may know it. An imported or
+    // merged SRT has no media.
+    var sourceFromAsr by remember { mutableStateOf(false) }
+    // 0.10.1 (TD-026): the translation correction station's
+    // session state, mirroring the transcription station's.
+    var correcting by remember { mutableStateOf(false) }
+    var memoryForSession by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    // The media of a restored draft, re-inspected at restore
+    // time for the station's preview.
+    var restoredMediaInfo by remember { mutableStateOf<VideoInfo?>(null) }
     val mergeParts = remember { mutableStateListOf<MergePart>() }
     var importError by remember { mutableStateOf(false) }
 
@@ -123,6 +139,38 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
         if (lastAsr != null && sourceSegments == null && lastAsr.segments.isNotEmpty()) {
             sourceSegments = lastAsr.segments
             sourceName = lastAsr.inputName
+            sourceFromAsr = true
+        }
+    }
+
+    // 0.10.1 (TD-026): the translation work draft comes back,
+    // exactly as in transcription — opening the tool idle over
+    // a saved draft restores it as the Done state, with its
+    // own language pair, and re-inspects its media for the
+    // correction station's preview when it is still readable.
+    LaunchedEffect(Unit) {
+        if (TranslateService.state.value is TranslateJobState.Idle) {
+            val draft = withContext(Dispatchers.IO) {
+                DraftsRepository.loadTranslation(context)
+            }
+            if (draft != null &&
+                TranslateService.state.value is TranslateJobState.Idle
+            ) {
+                TranslateService.restoreFromDraft(draft)
+                srcLang = draft.srcLang
+                tgtLang = draft.tgtLang
+                val uriStr = draft.mediaUri
+                if (!uriStr.isNullOrEmpty()) {
+                    val info = withContext(Dispatchers.IO) {
+                        try {
+                            inspectVideo(context, Uri.parse(uriStr))
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+                    if (info != null) restoredMediaInfo = info
+                }
+            }
         }
     }
 
@@ -173,6 +221,7 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     sourceSegments = segs
                     sourceName = name
                     sourceNote = "file"
+                    sourceFromAsr = false
                 }
             }
         }
@@ -233,6 +282,12 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
 
     fun startJob() {
         val segs = sourceSegments ?: return
+        // TD-026: tell the service where this source was heard
+        // from, when it was heard from anywhere — the finished
+        // job's work draft carries it to the correction
+        // station. An imported or merged SRT passes null.
+        TranslateService.sourceMediaUri =
+            if (sourceFromAsr) state.currentUri?.toString() else null
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -259,6 +314,39 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
 
+        // 0.10.1 (TD-026): while the translation correction
+        // station is open it owns the screen, exactly as the
+        // transcription station does. It receives the Done
+        // result's source and translated segments, the job's
+        // language pair and the translation-memory snapshot;
+        // its save makes the corrected cues the result and
+        // refreshes the work draft.
+        if (correcting && doneState != null) {
+            TranslationCorrectionScreen(
+                info = if (sourceFromAsr) state.currentInfo else restoredMediaInfo,
+                source = doneState.source,
+                segments = doneState.segments,
+                srcLang = doneState.srcLang,
+                tgtLang = doneState.tgtLang,
+                memory = memoryForSession,
+                onSave = { corrected, pairs ->
+                    if (pairs.isNotEmpty()) {
+                        val prefs = context.getSharedPreferences(
+                            TranslateService.MEMORY_PREFS, Context.MODE_PRIVATE
+                        )
+                        prefs.edit().apply {
+                            pairs.forEach { (k, v) -> putString(k, v) }
+                            apply()
+                        }
+                    }
+                    TranslateService.applyCorrectedSegments(context, corrected)
+                    correcting = false
+                },
+                onCancel = { correcting = false }
+            )
+            return@Column
+        }
+
         HowToCard(
             steps = listOf(
                 stringResource(R.string.m5_howto_1),
@@ -276,6 +364,7 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                 sourceSegments = lastAsr.segments
                 sourceName = lastAsr.inputName
                 sourceNote = "asr"
+                sourceFromAsr = true
             }) { Text(stringResource(R.string.m5_source_last, lastAsr.segments.size)) }
         }
         OutlinedButton(
@@ -345,6 +434,7 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     sourceSegments = merged
                     sourceName = mergeParts.firstOrNull()?.name ?: "merged"
                     sourceNote = "merged"
+                    sourceFromAsr = false
                 },
                 enabled = mergeParts.size >= 2 && durations.all { it != null },
                 modifier = Modifier.padding(start = 8.dp)
@@ -461,6 +551,17 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
         when (val j = job) {
             is TranslateJobState.Done -> {
                 Spacer(Modifier.height(16.dp))
+                if (TranslateService.restoredFromDraft) {
+                    // TD-026: a restored result says so, as in
+                    // transcription — earlier work come back,
+                    // not a job that just ran.
+                    Text(
+                        stringResource(R.string.m5d_restored),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (j.numberFlags.isNotEmpty()) {
                     Text(
                         stringResource(
@@ -490,6 +591,23 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(8.dp))
+                // 0.10.1 (TD-026): the translation correction
+                // station — source and translation side by
+                // side, the offline translator inside the
+                // corrector as the owner ordered. The memory
+                // snapshot is read at the door.
+                Button(
+                    onClick = {
+                        memoryForSession = context.getSharedPreferences(
+                            TranslateService.MEMORY_PREFS, Context.MODE_PRIVATE
+                        ).all.mapNotNull { (k, v) ->
+                            (v as? String)?.let { k to it }
+                        }.toMap()
+                        correcting = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(stringResource(R.string.m5c_open)) }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = editedText,

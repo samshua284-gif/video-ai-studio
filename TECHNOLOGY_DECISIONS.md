@@ -1500,3 +1500,113 @@ feel on a real film's transcription — correcting a cue
 while hearing it, teaching a fix and meeting it again
 in the next file. The synthetic guarantees are what
 this build claims — nothing more.
+
+## TD-026 — Work drafts and the translation correction station: the translator inside the corrector (0.10.1, 2026-11-28)
+
+Ordered by the owner after his first field session on
+0.10.0, in his words: «لقد تعبت والله — عندما خرجت من
+المصحح اللغوي اختفى كل شي ولم أحفظ ملف SRT، وبحثت في
+المشاريع ولم أجده» (he exited the corrector and
+everything was gone; no SRT saved; nothing in Projects),
+and «يجب أن يكون هناك مترجم أوفلاين في المصحح» (there
+must be an offline translator inside the corrector).
+Two parts, approved by name; nothing else was built.
+
+**Part A — the work draft.** The 0.10.0 loss was
+structural, not a bug in one screen: a finished result
+lived only in the services' in-memory state, and
+Projects registers only manual exports (TD-016), so
+leaving the tool — or the app dying — discarded the
+work itself. The fix is a draft, and the draft's
+boundary is the decision: a draft is app-internal
+working state (filesDir/transcription_draft.json,
+filesDir/translation_draft.json, written by
+DraftsRepository over the pure WorkDrafts models). It
+is written when a job finishes and at every
+correction-station save; it is cleared when a new job
+starts; opening a tool idle restores it as the Done
+state under a visible «مسودة مستعادة» note. A draft
+NEVER writes to Downloads or MediaStore, NEVER
+registers a Project, and NEVER exports anything — the
+owner's manual-save rule (0.7.0, TD-022) is untouched,
+because what he ordered then was that no FILE appear
+without his tap, not that his work be fragile. The
+draft model is pure Kotlin with hand-rolled JSON in
+the ProjectStore discipline; doubles round-trip via
+Double.toString/parseDouble, so a restored result's
+segments are byte-exact in text and bit-identical in
+timing (host harness mt101, section a). A corrupt or
+foreign draft file reads as no draft at all.
+
+Restore edges, stated plainly: the draft stores the
+source media URI when known. MainActivity's 0.5.5
+restore usually re-attaches the last imported file on
+its own; the tools additionally re-inspect the draft's
+URI when nothing is attached. If the URI is no longer
+readable, the result, its exports and both stations
+work unchanged — only hear-the-cue is unavailable, the
+TD-025 forgotten-file degradation. Uninstalling the
+app (required between CI-signed builds) clears drafts
+and both correction memories together with all app
+data, as before.
+
+**Part B — the translation correction station.** The
+mirror of TD-025 for a finished translation
+(ui/TranslationCorrectionTool.kt over the pure
+media/TranslationCorrection.kt): each cue card shows
+the SOURCE text read-only above the editable
+translation; timings are locked by the same structural
+discipline (text-keyed edits only, rebuilt through
+AsrSegment.copy; the source list is never an output).
+Hear-the-cue works when the source media is known —
+the translation tool now tells the service, before a
+job starts, whether its source is the latest
+transcription (whose media is the transcription's
+input); an imported or merged SRT carries no media and
+the button is honestly absent.
+
+«أعد ترجمة هذا السطر» runs the existing MtEngine on
+the cue's source text as a single unit — the unit
+rules, the worker and the guard do not change — using
+the station's own engine instance (the service's
+engine is released with its job and is never borrowed;
+TranslateJobState.Done now carries the job's language
+pair so the station re-translates with the pair the
+job actually used). The outcome is judged per cue by
+TranslationCorrection.evaluate, TD-020's honesty at
+cue level: a real rendering is OFFERED in the card and
+replaces the cue's text only on his «اعتماد» tap —
+applyOffer is the single path from an offer to a cue —
+while a complete pass-through or a blank result is a
+failure whose card shows the engine's first error
+verbatim, and a partial pass-through offer states its
+own count. Offering the passed-through source as a
+"new translation" would repeat the masquerade TD-020
+abolished.
+
+Memory: station saves harvest into the EXISTING
+translation CorrectionMemory with the existing
+semantics — TranslationCorrection.harvest is the
+segment-list form of CorrectionMemory.harvest, and
+the mt101 harness proves the two produce identical
+pairs from identical final texts. Suggestions key on
+the source segment, as the translation job's own
+lookup does, and apply only on tap. On save,
+TranslateService.applyCorrectedSegments replaces the
+Done result under the same size guard as
+transcription's, so exports and the Projects
+registration at manual export consume the corrected
+cues with byte-identical timing lines.
+
+Verification: host harness mt101 on the real shipped
+pure files (WorkDrafts, TranslationCorrection,
+TranscriptionCorrection, CorrectionMemory,
+SubtitleFormat) — draft round-trips for both tools
+including timing fingerprints, station timing lock and
+source immutability, the offer/accept state machine,
+and harvest equivalence; JUnit twins
+(WorkDraftsTest, TranslationCorrectionTest) run in CI.
+What only the owner's hands can prove: the restore
+feel after a real exit, and re-translating a garbled
+cue on a real film — the synthetic guarantees are what
+this build claims, nothing more.

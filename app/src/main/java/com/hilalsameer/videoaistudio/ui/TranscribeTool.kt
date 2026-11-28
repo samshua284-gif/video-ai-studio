@@ -64,6 +64,7 @@ import com.hilalsameer.videoaistudio.data.VideoInfo
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.data.formatSize
 import com.hilalsameer.videoaistudio.data.inspectVideo
+import com.hilalsameer.videoaistudio.media.DraftsRepository
 import com.hilalsameer.videoaistudio.media.ProjectKind
 import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.SubtitleFormat
@@ -334,6 +335,39 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         if (doneSegments != null) editedText = SubtitleFormat.buildTxt(doneSegments)
     }
 
+    // 0.10.1 (TD-026): the work draft comes back. When the
+    // tool opens idle — fresh start, or the app was closed
+    // over a finished result — a saved draft is restored as
+    // the Done state, so the result (and the correction
+    // station, and the exports) are exactly where he left
+    // them. The draft's media is re-inspected when nothing
+    // is attached: a readable file re-attaches the preview;
+    // an unreadable one leaves the result and its exports
+    // working without it, the TD-025 degradation.
+    LaunchedEffect(Unit) {
+        if (TranscribeService.state.value is TranscribeJobState.Idle) {
+            val draft = withContext(Dispatchers.IO) {
+                DraftsRepository.loadTranscription(context)
+            }
+            if (draft != null &&
+                TranscribeService.state.value is TranscribeJobState.Idle
+            ) {
+                TranscribeService.restoreFromDraft(draft)
+                val uriStr = draft.mediaUri
+                if (!uriStr.isNullOrEmpty() && state.currentInfo == null) {
+                    val uri = Uri.parse(uriStr)
+                    val info = withContext(Dispatchers.IO) {
+                        try { inspectVideo(context, uri) } catch (e: Exception) { null }
+                    }
+                    if (info != null) {
+                        state.currentUri = uri
+                        state.currentInfo = info
+                    }
+                }
+            }
+        }
+    }
+
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* best effort: the job runs either way */ }
@@ -554,7 +588,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                             apply()
                         }
                     }
-                    TranscribeService.applyCorrectedSegments(corrected)
+                    TranscribeService.applyCorrectedSegments(context, corrected)
                     taughtCount = pairs.size
                     correcting = false
                 },
@@ -783,6 +817,17 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         when (val j = job) {
             is TranscribeJobState.Done -> {
                 Spacer(Modifier.height(16.dp))
+                if (TranscribeService.restoredFromDraft) {
+                    // TD-026: a restored result says so — it is
+                    // his earlier work come back, not a job that
+                    // just ran, and nothing was exported for him.
+                    Text(
+                        stringResource(R.string.m4d_restored),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
                 if (j.segments.isEmpty()) {
                     Text(stringResource(R.string.m4_no_speech), style = MaterialTheme.typography.bodyLarge)
                 } else {

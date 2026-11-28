@@ -135,6 +135,7 @@
     <string name="m4c_save">Save corrections</string>
     <string name="m4c_taught">%1$d correction(s) saved to the correction memory</string>
     <string name="m4c_play_from">Hear this cue</string>
+    <string name="m4d_restored">Restored draft — the result you were working on is back. Nothing has been exported; saving is still done only by your export buttons.</string>
     <string name="m4_preview_play">Listen</string>
     <string name="m4_preview_pause">Pause</string>
     <string name="m4_preview_stop">Stop</string>
@@ -190,6 +191,18 @@
     <string name="m5_howto_3">Choose the source language and the language to translate to, then press Start translation. The work runs in the background with a notification, like transcription.</string>
     <string name="m5_howto_4">Timestamps never change: every translated line keeps its original timing, so the translated SRT matches the film directly.</string>
     <string name="m5_howto_5">When it finishes, save the result yourself with the two export buttons (TXT and SRT), wherever you choose. A ⚠ line under the result names any part whose numbers need your check. Edit the text before exporting if you wish — your edits are remembered and served back to you on identical future segments.</string>
+    <string name="m5d_restored">Restored draft — the translation you were working on is back. Nothing has been exported; saving is still done only by your export buttons.</string>
+    <string name="m5c_open">Correct the translation</string>
+    <string name="m5c_title">Translation correction</string>
+    <string name="m5c_hint">Each cue shows its source text (read-only) above the translation. Only the translated words are corrected here — timings are locked by design. Re-translate asks the offline translator for a new rendering of one cue; it replaces the text only when you accept it.</string>
+    <string name="m5c_source_label">Source</string>
+    <string name="m5c_retranslate">Re-translate this cue</string>
+    <string name="m5c_retranslating">Translating…</string>
+    <string name="m5c_offer_label">New translation:</string>
+    <string name="m5c_accept">Accept</string>
+    <string name="m5c_error_label">The engine reported:</string>
+    <string name="m5c_passed_note">%1$d of %2$d parts of this cue passed through untranslated.</string>
+    <string name="m5c_no_error_detail">No error detail was reported.</string>
     <string name="proj_title">My Projects</string>
     <string name="proj_empty">No saved works yet. Works you save from the tools will appear here.</string>
     <string name="proj_file_missing">The file no longer exists</string>

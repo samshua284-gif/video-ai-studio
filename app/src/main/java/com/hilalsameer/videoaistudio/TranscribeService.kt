@@ -15,8 +15,10 @@ import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.data.formatDuration
 import com.hilalsameer.videoaistudio.media.AsrEngine
 import com.hilalsameer.videoaistudio.media.AsrSegment
+import com.hilalsameer.videoaistudio.media.DraftsRepository
 import com.hilalsameer.videoaistudio.media.MediaCommands
 import com.hilalsameer.videoaistudio.media.MediaEngine
+import com.hilalsameer.videoaistudio.media.TranscriptionDraft
 import com.hilalsameer.videoaistudio.media.prepareInputFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -136,6 +138,16 @@ class TranscribeService : Service() {
                 val durationMs = intent.getLongExtra(EXTRA_DURATION_MS, 0L)
                 val lang = intent.getStringExtra(EXTRA_LANG) ?: ""
                 val title = intent.getStringExtra(EXTRA_TITLE)
+                // 0.10.1 (TD-026): a new job replaces the work
+                // draft — the old result's safety net is cleared
+                // with the old result, and the job's own media
+                // and language are remembered so the draft this
+                // job writes (and any correction-station save
+                // after it) can carry them.
+                lastUri = uriStr
+                lastLang = lang
+                restoredFromDraft = false
+                DraftsRepository.clearTranscription(applicationContext)
                 cancelFlag.set(false)
                 startForeground(NOTIF_ID, buildNotification(getString(R.string.m4_notif_running), null, null))
                 acquireWakeLock()
@@ -276,6 +288,19 @@ class TranscribeService : Service() {
                 // to Downloads on completion; the result lives in
                 // the Done state, and saving happens only from the
                 // export buttons the owner presses himself.
+                // 0.10.1 (TD-026): what IS written is the work
+                // draft — app-internal storage only, so leaving
+                // the tool or the app can no longer discard the
+                // result. A draft is not a save: no file appears
+                // anywhere the owner can see, and no Project is
+                // registered (see DraftsRepository).
+                DraftsRepository.saveTranscription(
+                    applicationContext,
+                    TranscriptionDraft(
+                        segments, name, title, uri.toString(), lang,
+                        System.currentTimeMillis()
+                    )
+                )
                 finish(TranscribeJobState.Done(segments, name, title))
             }
         } catch (e: Exception) {
@@ -414,6 +439,22 @@ class TranscribeService : Service() {
         /** The one job state both the service and the screen read. */
         val state = MutableStateFlow<TranscribeJobState>(TranscribeJobState.Idle)
 
+        /** 0.10.1 (TD-026): true only while the Done state on
+         *  screen came back from the work draft (see
+         *  [restoreFromDraft]) — the screen states it plainly,
+         *  so a restored result never masquerades as a job the
+         *  owner just ran. A new job or a fresh pipeline result
+         *  clears it. */
+        @Volatile
+        var restoredFromDraft: Boolean = false
+            private set
+
+        /** The last job's media and language, remembered at
+         *  ACTION_START so a correction-station save can write
+         *  a complete draft without re-asking the screen. */
+        @Volatile private var lastUri: String? = null
+        @Volatile private var lastLang: String = ""
+
         /**
          * 0.10.0 (TD-025): the corrected cues become THE
          * transcription result. The Done state is replaced by
@@ -425,11 +466,38 @@ class TranscribeService : Service() {
          * contract: correction can neither add nor remove a
          * cue, so a list of any other size is not a
          * correction and is refused.
+         *
+         * 0.10.1 (TD-026): the save also refreshes the work
+         * draft — the corrected list is the working list now,
+         * and it is the draft that must survive an exit.
          */
-        fun applyCorrectedSegments(corrected: List<AsrSegment>) {
+        fun applyCorrectedSegments(context: Context, corrected: List<AsrSegment>) {
             val cur = state.value as? TranscribeJobState.Done ?: return
             if (corrected.size != cur.segments.size) return
             state.value = cur.copy(segments = corrected)
+            DraftsRepository.saveTranscription(
+                context,
+                TranscriptionDraft(
+                    corrected, cur.inputName, cur.title, lastUri, lastLang,
+                    System.currentTimeMillis()
+                )
+            )
+        }
+
+        /**
+         * 0.10.1 (TD-026): brings a saved draft back as the
+         * Done state when the tool opens idle. The draft's
+         * media and language become the remembered ones, so a
+         * correction save after a restore still writes a
+         * complete draft.
+         */
+        fun restoreFromDraft(draft: TranscriptionDraft) {
+            lastUri = draft.mediaUri
+            lastLang = draft.language
+            restoredFromDraft = true
+            state.value = TranscribeJobState.Done(
+                draft.segments, draft.inputName, draft.title
+            )
         }
 
         fun start(

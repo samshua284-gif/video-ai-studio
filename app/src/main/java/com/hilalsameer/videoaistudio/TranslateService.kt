@@ -13,11 +13,13 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
+import com.hilalsameer.videoaistudio.media.DraftsRepository
 import com.hilalsameer.videoaistudio.media.MtEngine
 import com.hilalsameer.videoaistudio.media.MtLoadTracker
 import com.hilalsameer.videoaistudio.media.MtLanguages
 import com.hilalsameer.videoaistudio.media.SrtParser
 import com.hilalsameer.videoaistudio.media.TranslateFix
+import com.hilalsameer.videoaistudio.media.TranslationDraft
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,7 +48,14 @@ sealed interface TranslateJobState {
          *  through untranslated (TD-020) — 0 on a clean job;
          *  the Done screen and the final notification both
          *  state the count when it is not. */
-        val passedSegments: Int = 0
+        val passedSegments: Int = 0,
+        /** The job's language pair, as UI codes (0.10.1,
+         *  TD-026): the translation correction station
+         *  re-translates single cues and needs the pair the
+         *  job actually used, and the work draft persists it
+         *  so a restored result keeps its own pair. */
+        val srcLang: String = "en",
+        val tgtLang: String = "ar"
     ) : TranslateJobState
 
     data class Failed(val message: String) : TranslateJobState
@@ -128,6 +137,10 @@ class TranslateService : Service() {
                 val title = intent.getStringExtra(EXTRA_TITLE)
                 val src = intent.getStringExtra(EXTRA_SRC) ?: "en"
                 val tgt = intent.getStringExtra(EXTRA_TGT) ?: "ar"
+                // 0.10.1 (TD-026): a new job replaces the work
+                // draft, exactly as in transcription.
+                restoredFromDraft = false
+                DraftsRepository.clearTranslation(applicationContext)
                 cancelFlag.set(false)
                 lastNotifPct = -1
                 startForeground(
@@ -272,12 +285,18 @@ class TranslateService : Service() {
                     finish(
                         TranslateJobState.Done(
                             out, source, flags, name,
-                            passedSegments = outcome.passedSegments
+                            passedSegments = outcome.passedSegments,
+                            srcLang = src, tgtLang = tgt
                         )
                     )
                 }
                 TranslateFix.TranslateOutcome.DoneClean -> {
-                    finish(TranslateJobState.Done(out, source, flags, name))
+                    finish(
+                        TranslateJobState.Done(
+                            out, source, flags, name,
+                            srcLang = src, tgtLang = tgt
+                        )
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -290,6 +309,25 @@ class TranslateService : Service() {
     }
 
     private fun finish(terminal: TranslateJobState) {
+        // 0.10.1 (TD-026): a finished translation writes its
+        // work draft — app-internal storage only, so the
+        // result survives leaving the tool or the app. Not a
+        // save: no file appears anywhere the owner can see
+        // and no Project is registered (see DraftsRepository);
+        // the manual-save rule of TD-022 stands untouched.
+        if (terminal is TranslateJobState.Done) {
+            lastMediaUri = sourceMediaUri
+            DraftsRepository.saveTranslation(
+                applicationContext,
+                TranslationDraft(
+                    terminal.segments, terminal.source, terminal.numberFlags,
+                    terminal.inputName, terminal.passedSegments,
+                    terminal.srcLang, terminal.tgtLang, sourceMediaUri,
+                    System.currentTimeMillis()
+                )
+            )
+            sourceMediaUri = null
+        }
         state.value = terminal
         releaseWakeLock()
         when (terminal) {
@@ -431,6 +469,69 @@ class TranslateService : Service() {
         private const val EXTRA_TGT = "tgt"
 
         val state = MutableStateFlow<TranslateJobState>(TranslateJobState.Idle)
+
+        /** 0.10.1 (TD-026): the media the translation's source
+         *  was heard from, when the screen knows it (the source
+         *  was «آخر تفريغ», whose media is the transcription's
+         *  input). The screen sets this just before [start];
+         *  [finish] consumes it into the work draft, where it
+         *  lets the translation correction station offer
+         *  hear-the-cue after a restore. Null when the source
+         *  has no media (an imported SRT) — the station then
+         *  honestly works without preview. */
+        @Volatile
+        var sourceMediaUri: String? = null
+
+        /** 0.10.1 (TD-026): true only while the Done state on
+         *  screen came back from the work draft — stated
+         *  plainly on the screen, as in transcription. */
+        @Volatile
+        var restoredFromDraft: Boolean = false
+            private set
+
+        /** The current result's media, carried across
+         *  correction-station saves so their drafts stay
+         *  complete. */
+        @Volatile private var lastMediaUri: String? = null
+
+        /**
+         * 0.10.1 (TD-026): the translation correction
+         *  station's save — the corrected cues become THE
+         *  translation result, under the same size guard as
+         *  transcription's station (correction can neither
+         *  add nor remove a cue). Every consumer of the Done
+         *  state — the SRT/TXT exports and the Projects
+         *  registration at manual export — then works from
+         *  the corrected text with the original timings. The
+         *  save also refreshes the work draft.
+         */
+        fun applyCorrectedSegments(context: Context, corrected: List<AsrSegment>) {
+            val cur = state.value as? TranslateJobState.Done ?: return
+            if (corrected.size != cur.segments.size) return
+            val next = cur.copy(segments = corrected)
+            state.value = next
+            DraftsRepository.saveTranslation(
+                context,
+                TranslationDraft(
+                    next.segments, next.source, next.numberFlags,
+                    next.inputName, next.passedSegments,
+                    next.srcLang, next.tgtLang, lastMediaUri,
+                    System.currentTimeMillis()
+                )
+            )
+        }
+
+        /** 0.10.1 (TD-026): brings a saved translation draft
+         *  back as the Done state when the tool opens idle. */
+        fun restoreFromDraft(draft: TranslationDraft) {
+            lastMediaUri = draft.mediaUri
+            restoredFromDraft = true
+            state.value = TranslateJobState.Done(
+                draft.segments, draft.source, draft.numberFlags,
+                draft.inputName, draft.passedSegments,
+                draft.srcLang, draft.tgtLang
+            )
+        }
 
         fun start(
             context: Context, srt: String, name: String,
