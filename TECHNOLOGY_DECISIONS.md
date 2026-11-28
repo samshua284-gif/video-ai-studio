@@ -989,3 +989,119 @@ and speed on his Samsung. His re-run of the same EN→AR
 job is the verdict: Arabic text in the result box is
 the first true end-to-end translation in the app's
 history.
+
+## TD-022 — Field polish: a named load, a counter born at planning, manual-only translation saving (0.9.4, 2026-11-28)
+
+Three items, every one of them ordered by the owner from
+his 0.9.2 field runs on 2026-11-28. Nothing else moved:
+the 0.9.2 diagnostics and honesty machinery and the
+0.9.3 arb_Arab fix are untouched.
+
+**Item 1 — transcription: the load has a name, and the
+counter is born at planning.** Field report: «عند تفريغ
+فيديو او صوت لايظهر عداد التقدم» — transcribing a video
+or audio file shows no progress counter. The mechanics,
+verified in the code: `AsrEngine.transcribe` began with
+`recognizerFor(language)` — building the sherpa
+recognizer over ~946 MB of medium model — then ran the
+VAD pass and the chunk planning, and the FIRST
+`onProgress` fired only after the first chunk had
+decoded. Until then the job sat in `Transcribing(0,0)`,
+whose UI fallback was the generic «تجهيز الملف...» over
+a 0% bar. On a short clip that invisible stretch is most
+of the job, so the counter effectively did not exist.
+
+The fix has three parts. (a) The load is split out:
+`AsrEngine.prepare(language)` performs exactly what
+`recognizerFor(language)` does, with its caching —
+idempotent, a no-op when the recognizer for that
+language exists; `transcribe`'s internal call becomes
+the cached no-op. (b) `TranscribeService.runPipeline`
+runs the load as a new state, `TranscribeJobState.
+LoadingEngine`, between extraction and transcription,
+shows «جارٍ تحميل نموذج التفريغ...» on screen and in the
+notification with an indeterminate indicator — no
+percent, because the native load reports none and none
+is fabricated — and checks the cancel flag the moment
+`prepare` returns, finishing Cancelled BEFORE any VAD
+or decode. A defensive `isCancelled()` check also sits
+immediately after the internal `recognizerFor` call in
+`transcribe`. (c) The counter is born at planning:
+`transcribe` now calls `onProgress(0, chunks.size)`
+immediately after the chunk plan is built — on both the
+VAD path and the fallback-windows path — before the
+decode loop. The remaining `Transcribing(0,0)` window
+(VAD + planning) is labelled honestly as «جارٍ تحليل
+الكلام...» (`m4_analysing`) in the UI fallback and in
+the notification, replacing the generic preparing text.
+
+**Item 2 — transcription cancel states its limit.**
+Field report: «وعند الالغاء يتوقف عند جار الايقاف» —
+cancelling seems to hang at «جارٍ الإيقاف...». A cancel
+pressed during the model load must wait out the load:
+recognizer construction is a single native call and
+cannot be cut mid-way safely. Item 1's post-load check
+bounds the wait to the load remainder plus ZERO decodes
+— the job stops before any further work. What was
+missing was the statement of that limit: the
+Transcribing screen's Cancelling state now carries a
+smaller line under «جارٍ الإيقاف...» — `m4_cancelling_
+hint`: «يُستكمل الإيقاف عند أول نقطة آمنة — تحميل
+النموذج أو فكّ جزء جارٍ لا يُقطع من المنتصف.» The
+translation Cancelling gets no such line: its waits are
+AbortableAwait slices and land in ~250 ms, so there is
+no limit to confess.
+
+**Item 3 — translation saving is manual-only.** The
+owner's failed 0.9.2 run saved nothing (the TD-020
+honesty rule), and HowTo item 5 still claimed the
+translated SRT + TXT "are saved automatically to
+Downloads" — a claim his own run had just disproved.
+Offered both corrections, he chose (2026-11-28 10:50):
+«اجعل حفظ الترجمة يدويًا فقط مثل التفريغ، وأزل الحفظ
+التلقائي» — make translation saving manual-only like
+transcription, remove the auto-save. That mirrors his
+0.7.0 transcription rule exactly: the owner's standing
+preference is that nothing is written until he presses
+the button himself.
+
+So: `TranslateService.autoSave()` and `writeDownload()`
+are deleted entirely; no file is written at job
+completion for DoneClean or DoneWithWarning; the Done
+state no longer carries an `autoSaved` flag; the final
+notification is the one plain text (`m5_notif_done` —
+"open the app to see and export it"); the Done screen's
+auto-save note is gone. The two export buttons (TXT,
+SRT) — which operate on the in-memory Done result and
+were field-used — are the only save path. `m5_howto_5`
+is rewritten truthfully in both locales, opening with
+the same sentence as transcription's corrected
+`m4_howto_4` ("save the result yourself with the two
+export buttons (TXT and SRT), wherever you choose"),
+and keeping its other two facts, which remain true: the
+⚠ line naming parts whose numbers need his check, and
+the correction-memory sentence. The two strings that
+existed only to claim the auto-save — `m5_notif_done_
+saved` and `m5_autosave_note` — are removed from both
+locales (the 0.9.1 precedent). Parity: 188/188.
+
+**Projects coherence.** Translation works joined
+Projects at auto-save time (0.9.0, TD-016). The
+registration point moves to where saving now happens:
+TranslateTool's manual export. That hook already existed
+— the save launcher registers `ProjectKind.TRANSLATION`
+with the picked document's URI when the copy finishes,
+the exact pattern transcription's manual saves use — so
+removing the service-side registration leaves precisely
+one registration per exported file, and an unexported
+translation registers nothing. The Projects model is
+unchanged.
+
+**Phone-only remainder, stated honestly.** What is
+proven here: the code paths, the state machine, the
+strings, the compile, the suites. What only the owner's
+phone can prove: how long the named loading phase
+actually lasts on his Samsung, whether the counter's
+birth at planning reads as promised on a short clip,
+and how the bounded cancel FEELS — the load remainder
+is still a wait, now a named and bounded one.

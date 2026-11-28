@@ -228,11 +228,29 @@ class AsrEngine(private val context: Context) {
     }
 
     /**
+     * Load the recognizer for [language] ahead of the job (0.9.4,
+     * TD-022). The model load — materializing ~946 MB of medium
+     * model on first use and building the sherpa recognizer — is
+     * the longest single wait in the pipeline, and until 0.9.4 it
+     * happened invisibly inside [transcribe], behind the generic
+     * "preparing" label. The service now runs it as its own named
+     * phase (LoadingEngine) and checks the cancel flag the moment
+     * it returns, before any VAD or decode work. Idempotent:
+     * exactly [recognizerFor]'s caching — a no-op when the
+     * recognizer for this language already exists.
+     */
+    fun prepare(language: String) {
+        recognizerFor(language)
+    }
+
+    /**
      * Transcribe a 16 kHz mono WAV (MediaCommands.extractWav16k).
      * [language] is a Whisper code ("ar", "en", "hi", "ur") or ""
-     * for automatic detection. Progress is reported per decoded
-     * speech chunk (0.7.0: chunks, not fixed windows — a file that
-     * is mostly silence has few chunks and finishes fast).
+     * for automatic detection. Progress is reported once with the
+     * plan's total before decoding starts (0.9.4) and then per
+     * decoded speech chunk (0.7.0: chunks, not fixed windows — a
+     * file that is mostly silence has few chunks and finishes
+     * fast).
      */
     fun transcribe(
         wav: File,
@@ -245,6 +263,10 @@ class AsrEngine(private val context: Context) {
             "expected a 16 kHz mono WAV, got ${info.sampleRate} Hz / ${info.channels} ch"
         }
         val rec = recognizerFor(language)
+        // 0.9.4 (TD-022): a cancel pressed during the load is
+        // honoured here, before the VAD pass — after prepare()
+        // this is a cached no-op, so the check is free.
+        if (isCancelled()) return emptyList()
         val totalSec = info.totalSamples / 16000.0
         // Pass 1: where is the speech? A VAD failure falls back to
         // plain windows over everything — speech is never lost to it.
@@ -259,6 +281,12 @@ class AsrEngine(private val context: Context) {
         } else {
             SpeechChunks.fallback(totalSec)
         }
+        // 0.9.4 (TD-022): the counter is born here — the plan's
+        // total reaches the UI BEFORE the first decode, not after
+        // it. Until 0.9.4 the first progress call fired only once
+        // chunk 1 had decoded, so the whole load + VAD + plan
+        // stretch showed a 0% bar with no numbers at all.
+        onProgress(0, chunks.size)
         // Pass 2: decode speech chunks only.
         val segments = mutableListOf<AsrSegment>()
         var done = 0

@@ -545,6 +545,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
         // video was imported.
         val jobOwnsScreen = job is TranscribeJobState.Preparing ||
             job is TranscribeJobState.Extracting ||
+            job is TranscribeJobState.LoadingEngine ||
             job is TranscribeJobState.Transcribing ||
             job is TranscribeJobState.Cancelling ||
             job is TranscribeJobState.Done ||
@@ -608,6 +609,7 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                 info = info,
                 jobActive = job is TranscribeJobState.Preparing ||
                     job is TranscribeJobState.Extracting ||
+                    job is TranscribeJobState.LoadingEngine ||
                     job is TranscribeJobState.Transcribing ||
                     job is TranscribeJobState.Cancelling
             )
@@ -674,6 +676,18 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     Text(stringResource(R.string.m2_cancel))
                 }
             }
+            is TranscribeJobState.LoadingEngine -> {
+                // 0.9.4 (TD-022): the load has a name now, and an
+                // indeterminate indicator — the native load
+                // reports no percent and none is invented.
+                Row {
+                    CircularProgressIndicator()
+                    Text("  " + stringResource(R.string.m4_loading_engine))
+                }
+                TextButton(onClick = { TranscribeService.cancel(context) }) {
+                    Text(stringResource(R.string.m2_cancel))
+                }
+            }
             is TranscribeJobState.Transcribing -> {
                 val frac = if (j.total > 0) j.done.toFloat() / j.total else 0f
                 LinearProgressIndicator(progress = { frac }, modifier = Modifier.fillMaxWidth())
@@ -682,7 +696,10 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                         R.string.m4_transcribing, j.done, j.total,
                         j.done * 100 / j.total
                     )
-                    else stringResource(R.string.m2_preparing),
+                    // TD-022: before the plan exists (VAD +
+                    // planning) the label says what is actually
+                    // happening, not the generic preparing text.
+                    else stringResource(R.string.m4_analysing),
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 TextButton(onClick = { TranscribeService.cancel(context) }) {
@@ -694,6 +711,16 @@ fun TranscribeToolScreen(state: StudioState, onBack: () -> Unit) {
                     CircularProgressIndicator()
                     Text("  " + stringResource(R.string.m4_cancelling))
                 }
+                // 0.9.4 (TD-022): the wait has a stated limit —
+                // a cancel lands at the first safe point, and
+                // saying so turns a seeming hang into a bounded
+                // wait the owner can read.
+                Text(
+                    stringResource(R.string.m4_cancelling_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
         }
 

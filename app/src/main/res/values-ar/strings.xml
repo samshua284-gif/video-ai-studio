@@ -117,6 +117,9 @@
     <string name="m4_notif_failed">فشل التفريغ الصوتي — افتح التطبيق للتفاصيل.</string>
     <string name="m4_extracting">جارٍ استخراج الصوت… (%1$d%%)</string>
     <string name="m4_transcribing">جارٍ تفريغ الجزء %1$d من %2$d (%3$d%%)…</string>
+    <string name="m4_loading_engine">جارٍ تحميل نموذج التفريغ…</string>
+    <string name="m4_analysing">جارٍ تحليل الكلام…</string>
+    <string name="m4_cancelling_hint">يُستكمل الإيقاف عند أول نقطة آمنة — تحميل النموذج أو فكّ جزء جارٍ لا يُقطع من المنتصف.</string>
     <string name="m4_preview_play">استماع</string>
     <string name="m4_preview_pause">إيقاف مؤقت</string>
     <string name="m4_preview_stop">إيقاف</string>
@@ -164,16 +167,14 @@
     <string name="m5_notif_running">بدء الترجمة…</string>
     <string name="m5_notif_loading">جارٍ تحميل نموذج الترجمة…</string>
     <string name="m5_notif_done">اكتملت الترجمة — افتح التطبيق لرؤيتها وتصديرها.</string>
-    <string name="m5_notif_done_saved">اكتملت الترجمة — حُفظ ملف SRT المترجم في التنزيلات.</string>
     <string name="m5_notif_failed">فشلت الترجمة — افتح التطبيق للتفاصيل.</string>
-    <string name="m5_autosave_note">حُفظ ملفا SRT وTXT المترجمان تلقائيًا أيضًا في مجلد التنزيلات.</string>
     <string name="m5_same_lang">لغة المصدر والهدف واحدة — اختر هدفًا مختلفًا.</string>
     <string name="m5_no_source">اختر المصدر أولًا: آخر تفريغ، أو ملف SRT مستورد، أو أجزاء مدمجة.</string>
     <string name="m5_howto_1">اختر المصدر: آخر تفريغ يظهر هنا تلقائيًا، أو استورد أي ملف SRT.</string>
     <string name="m5_howto_2">إن كان الفيلم مقسّمًا إلى أجزاء، أضف ملف SRT لكل جزء بالترتيب تحت «الدمج»، واكتب مدة فيديو كل جزء بالضبط، ثم اضغط «الدمج بالترتيب» — يخرج ملف واحد جاهز للإنتاج.</string>
     <string name="m5_howto_3">اختر لغة المصدر واللغة المراد الترجمة إليها، ثم اضغط «بدء الترجمة». العمل يجري في الخلفية مع إشعار، كما في التفريغ.</string>
     <string name="m5_howto_4">التوقيتات لا تتغير أبدًا: كل سطر مترجم يحتفظ بتوقيته الأصلي، فيطابق ملف SRT المترجم الفيلم مباشرة.</string>
-    <string name="m5_howto_5">عند الانتهاء يُحفظ ملفا SRT وTXT المترجمان تلقائيًا في التنزيلات. وسطر ⚠ تحت النتيجة يسمّي أي جزء تحتاج أرقامه مراجعتك. عدّل النص قبل التصدير إن شئت — تعديلاتك تُحفظ في ذاكرة تصحيحك وتُقدَّم لك عند تكرار الجزء نفسه مستقبلًا.</string>
+    <string name="m5_howto_5">عند الانتهاء، احفظ النتيجة بنفسك بزرّي التصدير (TXT وSRT) في المكان الذي تختاره. وسطر ⚠ تحت النتيجة يسمّي أي جزء تحتاج أرقامه مراجعتك. عدّل النص قبل التصدير إن شئت — تعديلاتك تُحفظ في ذاكرة تصحيحك وتُقدَّم لك عند تكرار الجزء نفسه مستقبلًا.</string>
     <string name="proj_title">مشاريعي</string>
     <string name="proj_empty">لا أعمال محفوظة بعد. الأعمال التي تحفظها من الأدوات ستظهر هنا.</string>
     <string name="proj_file_missing">لم يعد الملف موجودًا</string>

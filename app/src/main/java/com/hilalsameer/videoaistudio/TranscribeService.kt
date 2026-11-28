@@ -33,6 +33,14 @@ sealed interface TranscribeJobState {
     data object Idle : TranscribeJobState
     data object Preparing : TranscribeJobState
     data class Extracting(val fraction: Float) : TranscribeJobState
+
+    /** The speech model is loading (0.9.4, TD-022): a named
+     *  phase of its own, because it is the longest wait in the
+     *  pipeline and until 0.9.4 it ran invisibly inside the
+     *  engine call behind a generic label. It carries no
+     *  percent — the native load reports none, and none is
+     *  fabricated. */
+    data object LoadingEngine : TranscribeJobState
     data class Transcribing(val done: Int, val total: Int) : TranscribeJobState
     data class Done(
         val segments: List<AsrSegment>,
@@ -143,20 +151,43 @@ class TranscribeService : Service() {
                 )
                 return
             }
-            state.value = TranscribeJobState.Transcribing(0, 0)
             val engineAsr = asr ?: AsrEngine(applicationContext).also { asr = it }
+            // 0.9.4 (TD-022): the model load is a named phase,
+            // run BEFORE transcribe() — and a cancel pressed
+            // during it is honoured the moment it returns,
+            // before any VAD or decode work happens. Until
+            // 0.9.4 the load ran inside transcribe() behind
+            // the generic preparing label, and a cancel waited
+            // it out in silence.
+            state.value = TranscribeJobState.LoadingEngine
+            updateNotificationForce(getString(R.string.m4_loading_engine))
+            engineAsr.prepare(lang)
+            if (cancelFlag.get()) {
+                finish(TranscribeJobState.Cancelled)
+                return
+            }
+            state.value = TranscribeJobState.Transcribing(0, 0)
+            updateNotificationForce(getString(R.string.m4_analysing))
             val windowSegments = engineAsr.transcribe(
                 wav, lang,
                 { done, total ->
                     state.value = TranscribeJobState.Transcribing(done, total)
                     acquireWakeLock()
-                    updateNotification(
-                        getString(
-                            R.string.m4_transcribing, done, total,
-                            if (total > 0) done * 100 / total else 0
-                        ),
-                        done, total
-                    )
+                    if (total > 0) {
+                        updateNotification(
+                            getString(
+                                R.string.m4_transcribing, done, total,
+                                done * 100 / total
+                            ),
+                            done, total
+                        )
+                    } else {
+                        // No plan, no counter: the honest label
+                        // for the VAD + planning window (TD-022).
+                        updateNotification(
+                            getString(R.string.m4_analysing), null, null
+                        )
+                    }
                 },
                 { cancelFlag.get() }
             )

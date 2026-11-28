@@ -117,6 +117,9 @@
     <string name="m4_notif_failed">Transcription failed — open the app for details.</string>
     <string name="m4_extracting">Extracting the audio… (%1$d%%)</string>
     <string name="m4_transcribing">Transcribing part %1$d of %2$d (%3$d%%)…</string>
+    <string name="m4_loading_engine">Loading the transcription model…</string>
+    <string name="m4_analysing">Analysing the speech…</string>
+    <string name="m4_cancelling_hint">Stopping completes at the first safe point — a model load or a part being decoded is not cut in the middle.</string>
     <string name="m4_preview_play">Listen</string>
     <string name="m4_preview_pause">Pause</string>
     <string name="m4_preview_stop">Stop</string>
@@ -164,16 +167,14 @@
     <string name="m5_notif_running">Translation starting…</string>
     <string name="m5_notif_loading">Loading the translation model…</string>
     <string name="m5_notif_done">Translation complete — open the app to see and export it.</string>
-    <string name="m5_notif_done_saved">Translation complete — the translated SRT was saved to Downloads.</string>
     <string name="m5_notif_failed">Translation failed — open the app for details.</string>
-    <string name="m5_autosave_note">The translated SRT and TXT were also saved automatically to the Downloads folder.</string>
     <string name="m5_same_lang">Source and target are the same language — pick a different target.</string>
     <string name="m5_no_source">Choose a source first: the latest transcription, an imported SRT, or merged parts.</string>
     <string name="m5_howto_1">Pick the source: the latest transcription appears here automatically, or import any SRT file.</string>
     <string name="m5_howto_2">If the film was split into parts, add each part\'s SRT in order under Merge, write each part\'s exact video length, and press Merge in order — one file comes out, ready for production.</string>
     <string name="m5_howto_3">Choose the source language and the language to translate to, then press Start translation. The work runs in the background with a notification, like transcription.</string>
     <string name="m5_howto_4">Timestamps never change: every translated line keeps its original timing, so the translated SRT matches the film directly.</string>
-    <string name="m5_howto_5">When it finishes, the translated SRT and TXT are saved automatically to Downloads. A ⚠ line under the result names any part whose numbers need your check. Edit the text before exporting if you wish — your edits are remembered and served back to you on identical future segments.</string>
+    <string name="m5_howto_5">When it finishes, save the result yourself with the two export buttons (TXT and SRT), wherever you choose. A ⚠ line under the result names any part whose numbers need your check. Edit the text before exporting if you wish — your edits are remembered and served back to you on identical future segments.</string>
     <string name="proj_title">My Projects</string>
     <string name="proj_empty">No saved works yet. Works you save from the tools will appear here.</string>
     <string name="proj_file_missing">The file no longer exists</string>

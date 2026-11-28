@@ -191,6 +191,10 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     }
                     // 0.9.0 (TD-016): the copy finished — the work
                     // joins Projects under the picked document.
+                    // 0.9.4 (TD-022): with the service auto-save
+                    // removed, this manual export is the ONLY
+                    // registration point for a translation — an
+                    // unexported translation registers nothing.
                     ProjectsRepository.register(
                         context, ProjectKind.TRANSLATION, file.name,
                         dest.toString(), sourceName
@@ -508,14 +512,12 @@ fun TranslateToolScreen(state: StudioState, onBack: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.m5_export_srt)) }
-                if (j.autoSaved) {
-                    Text(
-                        stringResource(R.string.m5_autosave_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
+                // 0.9.4 (TD-022): saving is manual-only — these
+                // two export buttons are the ONLY save path, and
+                // each completed export registers the work in
+                // Projects (see saveLauncher above). The 0.5.4-era
+                // auto-save note that stood here is gone with the
+                // auto-save itself.
             }
             is TranslateJobState.Failed -> {
                 Spacer(Modifier.height(16.dp))

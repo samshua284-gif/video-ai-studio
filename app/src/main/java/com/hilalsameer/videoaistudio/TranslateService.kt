@@ -5,24 +5,18 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Environment
 import android.os.IBinder
 import android.os.PowerManager
-import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
 import com.hilalsameer.videoaistudio.media.AsrSegment
 import com.hilalsameer.videoaistudio.media.CorrectionMemory
 import com.hilalsameer.videoaistudio.media.MtEngine
 import com.hilalsameer.videoaistudio.media.MtLoadTracker
-import com.hilalsameer.videoaistudio.media.ProjectKind
-import com.hilalsameer.videoaistudio.media.ProjectsRepository
 import com.hilalsameer.videoaistudio.media.MtLanguages
 import com.hilalsameer.videoaistudio.media.SrtParser
-import com.hilalsameer.videoaistudio.media.SubtitleFormat
 import com.hilalsameer.videoaistudio.media.TranslateFix
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +42,6 @@ sealed interface TranslateJobState {
         val source: List<AsrSegment>,
         val numberFlags: List<Int>,
         val inputName: String,
-        val autoSaved: Boolean = false,
         /** Segments containing at least one unit that passed
          *  through untranslated (TD-020) — 0 on a clean job;
          *  the Done screen and the final notification both
@@ -75,8 +68,10 @@ sealed interface TranslateJobState {
  * verbatim; the NLLB engine translates the rest; TD-006 Layer 1
  * then verifies the segment's numbers survived — a segment whose
  * numbers did not is FLAGGED in the result, never silently
- * rewritten. On completion the translated SRT + TXT are written
- * to Downloads automatically (0.5.4's rule, carried over).
+ * rewritten. Saving is MANUAL-ONLY (0.9.4, TD-022 — the owner's
+ * explicit decision, mirroring transcription's 0.7.0 rule): this
+ * service writes no file at completion; the result lives in the
+ * Done state and is saved only from the screen's export buttons.
  *
  * TD-020: the engine now reports per segment how many of its
  * units really translated and how many passed through (see
@@ -274,17 +269,15 @@ class TranslateService : Service() {
                     finish(TranslateJobState.Failed(message))
                 }
                 is TranslateFix.TranslateOutcome.DoneWithWarning -> {
-                    val saved = autoSave(name, title, tgt, out)
                     finish(
                         TranslateJobState.Done(
-                            out, source, flags, name, saved,
+                            out, source, flags, name,
                             passedSegments = outcome.passedSegments
                         )
                     )
                 }
                 TranslateFix.TranslateOutcome.DoneClean -> {
-                    val saved = autoSave(name, title, tgt, out)
-                    finish(TranslateJobState.Done(out, source, flags, name, saved))
+                    finish(TranslateJobState.Done(out, source, flags, name))
                 }
             }
         } catch (e: Exception) {
@@ -301,10 +294,10 @@ class TranslateService : Service() {
         releaseWakeLock()
         when (terminal) {
             is TranslateJobState.Done -> {
-                var text = getString(
-                    if (terminal.autoSaved) R.string.m5_notif_done_saved
-                    else R.string.m5_notif_done
-                )
+                // TD-022: no auto-save exists, so the one Done
+                // text states the plain fact — open the app to
+                // see and export the result.
+                var text = getString(R.string.m5_notif_done)
                 // TD-020: the pass-through count is stated in
                 // the notification too, not only on the screen.
                 if (terminal.passedSegments > 0) {
@@ -376,58 +369,6 @@ class TranslateService : Service() {
         lastNotifPct = -1
         getSystemService(NotificationManager::class.java)
             .notify(NOTIF_ID, buildNotification(text, null, null))
-    }
-
-    /** Translated SRT + TXT into public Downloads (0.5.4's rule). */
-    private fun autoSave(
-        name: String, title: String?, tgt: String, segments: List<AsrSegment>
-    ): Boolean {
-        if (segments.isEmpty()) return false
-        if (Build.VERSION.SDK_INT < 29) return false
-        val base = SubtitleFormat.exportBaseName(name, title)
-        val srtName = base + "_" + tgt + "_subtitles.srt"
-        val txtName = base + "_" + tgt + "_transcript.txt"
-        return try {
-            val srtUri = writeDownload(
-                srtName, "application/x-subrip",
-                SubtitleFormat.buildSrt(segments)
-            )
-            val txtUri = writeDownload(
-                txtName, "text/plain",
-                SubtitleFormat.buildTxt(segments)
-            )
-            // 0.9.0 (TD-016): completed auto-saves join Projects.
-            ProjectsRepository.register(
-                applicationContext, ProjectKind.TRANSLATION,
-                srtName, srtUri.toString(), name
-            )
-            ProjectsRepository.register(
-                applicationContext, ProjectKind.TRANSLATION,
-                txtName, txtUri.toString(), name
-            )
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun writeDownload(displayName: String, mime: String, content: String): android.net.Uri {
-        val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, displayName)
-            put(MediaStore.Downloads.MIME_TYPE, mime)
-            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            put(MediaStore.Downloads.IS_PENDING, 1)
-        }
-        val resolver = contentResolver
-        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-            ?: throw IllegalStateException("MediaStore insert failed")
-        resolver.openOutputStream(uri)?.use { out ->
-            out.write(content.toByteArray(Charsets.UTF_8))
-        } ?: throw IllegalStateException("MediaStore open failed")
-        values.clear()
-        values.put(MediaStore.Downloads.IS_PENDING, 0)
-        resolver.update(uri, values, null, null)
-        return uri
     }
 
     private fun postFinalNotification(text: String, icon: Int) {
